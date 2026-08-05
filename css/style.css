@@ -336,6 +336,30 @@ button {
 }
 .panel .sub { font-size: 12px; opacity: 0.6; margin-bottom: 16px; }
 
+.club-position {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.club-position .cp-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.55;
+}
+.club-position .cp-value {
+  font-family: 'Anton', sans-serif;
+  font-size: 17px;
+  color: var(--red);
+  letter-spacing: 0.2px;
+}
+
 .edit-name-btn {
   background: none;
   border: none;
