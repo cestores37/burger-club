@@ -48,9 +48,16 @@
         <h2>The Ledger</h2>
         <p>Every burger we've put to the test.</p>
         <button class="btn small hidden" id="add-entry-btn" style="margin-top:10px;width:100%;">+ Add a place</button>
+        <div class="sidebar-tabs">
+          <button class="tab-btn active" id="tab-places">Places</button>
+          <button class="tab-btn" id="tab-leaderboard">Leaderboard</button>
+        </div>
       </div>
-      <div id="entry-list"></div>
-      <div id="empty-state">No places added yet.</div>
+      <div id="places-view">
+        <div id="entry-list"></div>
+        <div id="empty-state">No places added yet.</div>
+      </div>
+      <div id="leaderboard-view" class="hidden"></div>
     </div>
     <div id="map"></div>
   </div>
