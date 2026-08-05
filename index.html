@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Burger Club</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍔</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div id="topbar" class="hidden">
+    <div class="brand">
+      <span class="brand-mark">BURGER CLUB</span>
+      <span class="brand-sub">The Ledger</span>
+    </div>
+    <div id="user-chip"></div>
+  </div>
+
+  <!-- Login screen -->
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="brand-mark">BURGER CLUB</div>
+      <p class="tag">Members only · ask the admin for a login</p>
+      <form id="login-form">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" required autocomplete="username">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn" style="width:100%;">Log in</button>
+        <div class="error-msg" id="login-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app-shell" class="hidden">
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <h2>The Ledger</h2>
+        <p>Every burger we've put to the test.</p>
+        <button class="btn small hidden" id="add-entry-btn" style="margin-top:10px;width:100%;">+ Add a place</button>
+      </div>
+      <div id="entry-list"></div>
+      <div id="empty-state">No places added yet.</div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <!-- Modal panel (detail / add review / add entry) -->
+  <div id="panel-overlay">
+    <div class="panel" id="panel-body"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

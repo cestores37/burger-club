@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Keep this list identical to ADMIN_EMAILS in js/firebase-config.js
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email in [
+        'c.estores37@gmail.com'
+      ];
+    }
+
+    match /restaurants/{restaurantId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+      // reviewId must be "{restaurantId}_{uid}" and userId must match the caller
+      allow create, update: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && reviewId == request.resource.data.restaurantId + '_' + request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
