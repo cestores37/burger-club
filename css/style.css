@@ -209,35 +209,29 @@ button {
 .burger-meter {
   --pct: 0%;
   position: relative;
-  height: 16px;
-  border-radius: 8px;
+  height: 18px;
+  border-radius: 9px;
   overflow: hidden;
-  background:
-    linear-gradient(to bottom,
-      #E3A537 0 16%,
-      #F6EBD9 16% 33%,
-      #7A9E58 33% 46%,
-      #C1272D 46% 62%,
-      #A9591F 62% 80%,
-      #E3A537 80% 100%);
-  filter: grayscale(1) brightness(1.35) contrast(0.85);
   border: 1px solid var(--ink);
+  background:
+    repeating-linear-gradient(
+      to right,
+      var(--paper-dim) 0,
+      var(--paper-dim) calc(20% - 1px),
+      var(--line) calc(20% - 1px),
+      var(--line) 20%
+    );
 }
 
 .burger-meter::after {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  bottom: 0;
   width: var(--pct);
-  background:
-    linear-gradient(to bottom,
-      #E3A537 0 16%,
-      #FFFBF2 16% 33%,
-      #7A9E58 33% 46%,
-      #C1272D 46% 62%,
-      #A9591F 62% 80%,
-      #E3A537 80% 100%);
-  filter: none;
+  background: linear-gradient(to right, var(--mustard), var(--red));
+  box-shadow: 1px 0 0 rgba(32,27,21,0.35) inset;
   transition: width 0.3s ease;
 }
 
