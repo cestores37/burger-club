@@ -294,3 +294,324 @@ function renderDetailPanel(restaurantId) {
           </div>
         `).join('') || ''}
       </div>
+
+      <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
+
+      ${sliderField('burger', 'Burger', myReview?.burgerRating)}
+      ${sliderField('sides', 'Sides / Drinks', myReview?.sidesRating)}
+      ${sliderField('establishment', 'Establishment', myReview?.establishmentRating)}
+
+      <div class="field">
+        <label>Notes (optional)</label>
+        <textarea id="review-comment" placeholder="What'd you get, how was it...">${escapeHtml(myReview?.comment || '')}</textarea>
+      </div>
+      <div class="panel-actions">
+        <button class="btn" id="save-review-btn">${myReview ? 'Update your review' : 'Save your review'}</button>
+        ${myReview ? '<button class="btn red small" id="delete-review-btn">Delete</button>' : ''}
+        ${isAdmin ? '<button class="btn ghost small" id="delete-entry-btn" title="Remove this place entirely">Remove place</button>' : ''}
+      </div>
+      <div class="error-msg" id="review-error"></div>
+    </div>
+  `;
+
+  const selectedRatings = {
+    burger: myReview?.burgerRating ?? 5.0,
+    sides: myReview?.sidesRating ?? 5.0,
+    establishment: myReview?.establishmentRating ?? 5.0
+  };
+
+  el('panel-close').addEventListener('click', closePanel);
+
+  el('edit-name-btn')?.addEventListener('click', () => {
+    const nameDisplay = el('name-display');
+    nameDisplay.outerHTML = `
+      <div class="name-edit-row" id="name-edit-row">
+        <input type="text" id="edit-name-input" value="${escapeHtml(r.name)}">
+        <button class="btn small" id="save-name-btn">Save</button>
+        <button class="btn ghost small" id="cancel-name-btn">Cancel</button>
+      </div>
+    `;
+    el('edit-name-input').focus();
+    el('edit-name-input').select();
+    el('cancel-name-btn').addEventListener('click', () => renderDetailPanel(restaurantId));
+    el('save-name-btn').addEventListener('click', async () => {
+      const newName = el('edit-name-input').value.trim();
+      if (!newName) return;
+      await updateDoc(doc(db, 'restaurants', restaurantId), { name: newName });
+    });
+    el('edit-name-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') el('save-name-btn').click();
+      if (e.key === 'Escape') renderDetailPanel(restaurantId);
+    });
+  });
+
+  ['burger', 'sides', 'establishment'].forEach(cat => {
+    const input = document.querySelector(`input[data-cat="${cat}"]`);
+    const readout = document.querySelector(`.slider-num[data-cat="${cat}"]`);
+    input.addEventListener('input', () => {
+      const val = parseFloat(input.value);
+      selectedRatings[cat] = val;
+      readout.textContent = val.toFixed(1);
+    });
+  });
+
+  el('save-review-btn').addEventListener('click', async () => {
+    const errBox = el('review-error');
+    errBox.textContent = '';
+    const comment = el('review-comment').value.trim();
+    const overall = (selectedRatings.burger + selectedRatings.sides + selectedRatings.establishment) / 3;
+    const reviewId = `${restaurantId}_${currentUser.uid}`;
+    try {
+      await setDoc(doc(db, 'reviews', reviewId), {
+        restaurantId,
+        userId: currentUser.uid,
+        userName: displayNameFor(currentUser.uid, currentUser.email.split('@')[0]),
+        burgerRating: selectedRatings.burger,
+        sidesRating: selectedRatings.sides,
+        establishmentRating: selectedRatings.establishment,
+        rating: Math.round(overall * 10) / 10,
+        comment,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      errBox.textContent = "Couldn't save — check your connection and try again.";
+    }
+  });
+
+  if (myReview) {
+    el('delete-review-btn')?.addEventListener('click', async () => {
+      await deleteDoc(doc(db, 'reviews', `${restaurantId}_${currentUser.uid}`));
+    });
+  }
+
+  if (isAdmin) {
+    el('delete-entry-btn')?.addEventListener('click', async () => {
+      if (!confirm(`Remove "${r.name}" and all its reviews? This can't be undone.`)) return;
+      await Promise.all(rs.map(rv => deleteDoc(doc(db, 'reviews', rv.id))));
+      await deleteDoc(doc(db, 'restaurants', restaurantId));
+      closePanel();
+    });
+  }
+}
+
+// ---------------- panel: add entry (admin) ----------------
+let selectedPlace = null; // {lat, lng} set once a suggestion is picked
+let searchDebounceId = null;
+let searchRequestSeq = 0;
+
+addEntryBtn.addEventListener('click', () => {
+  activeRestaurantId = null;
+  panelMode = 'add';
+  selectedPlace = null;
+  panelBody.innerHTML = `
+    <div class="panel-wrap">
+      <button class="close-x" id="panel-close">&times;</button>
+      <h2>Add a place</h2>
+      <div class="sub">Start typing — pick a match and the address fills in automatically.</div>
+      <div class="field" style="position:relative;">
+        <label>Search</label>
+        <input type="text" id="place-search" placeholder="e.g. Big Al's Burgers" autocomplete="off">
+        <div id="place-suggestions" class="suggestions hidden"></div>
+      </div>
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="new-name" placeholder="e.g. Big Al's Burgers">
+      </div>
+      <div class="field">
+        <label>Address</label>
+        <input type="text" id="new-address" placeholder="123 Main St, Brooklyn, NY">
+      </div>
+      <div class="panel-actions">
+        <button class="btn" id="geocode-save-btn">Save place</button>
+      </div>
+      <div class="error-msg" id="add-error"></div>
+    </div>
+  `;
+  panelOverlay.classList.add('open');
+  el('panel-close').addEventListener('click', closePanel);
+  el('geocode-save-btn').addEventListener('click', handleAddEntry);
+
+  const searchInput = el('place-search');
+  const suggestionsBox = el('place-suggestions');
+
+  searchInput.addEventListener('input', () => {
+    selectedPlace = null;
+    const q = searchInput.value.trim();
+    clearTimeout(searchDebounceId);
+    if (q.length < 3) {
+      suggestionsBox.classList.add('hidden');
+      suggestionsBox.innerHTML = '';
+      return;
+    }
+    searchDebounceId = setTimeout(() => runPlaceSearch(q, suggestionsBox), 350);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!suggestionsBox.contains(e.target) && e.target !== searchInput) {
+      suggestionsBox.classList.add('hidden');
+    }
+  });
+});
+
+async function runPlaceSearch(q, suggestionsBox) {
+  const seq = ++searchRequestSeq;
+  try {
+    // Biased toward NYC (where the map defaults) — still finds places anywhere.
+    const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lat=40.7128&lon=-74.0060&zoom=12`);
+    const data = await resp.json();
+    if (seq !== searchRequestSeq) return; // a newer search superseded this one
+    const features = data.features || [];
+    if (!features.length) {
+      suggestionsBox.innerHTML = `<div class="suggestion-item muted">No matches — you can still fill in the fields manually below.</div>`;
+      suggestionsBox.classList.remove('hidden');
+      return;
+    }
+    suggestionsBox.innerHTML = features.map((f, i) => {
+      const p = f.properties;
+      const name = p.name || q;
+      const addrParts = [p.housenumber && p.street ? `${p.housenumber} ${p.street}` : p.street, p.city, p.state, p.postcode].filter(Boolean);
+      const addr = addrParts.join(', ');
+      return `<button type="button" class="suggestion-item" data-idx="${i}">
+        <div class="s-name">${escapeHtml(name)}</div>
+        <div class="s-addr">${escapeHtml(addr)}</div>
+      </button>`;
+    }).join('');
+    suggestionsBox.classList.remove('hidden');
+    suggestionsBox.querySelectorAll('.suggestion-item[data-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const f = features[Number(btn.dataset.idx)];
+        const p = f.properties;
+        const name = p.name || q;
+        const addrParts = [p.housenumber && p.street ? `${p.housenumber} ${p.street}` : p.street, p.city, p.state, p.postcode].filter(Boolean);
+        el('new-name').value = name;
+        el('new-address').value = addrParts.join(', ');
+        const [lng, lat] = f.geometry.coordinates;
+        selectedPlace = { lat, lng };
+        suggestionsBox.classList.add('hidden');
+        el('place-search').value = name;
+      });
+    });
+  } catch (err) {
+    if (seq !== searchRequestSeq) return;
+    suggestionsBox.innerHTML = `<div class="suggestion-item muted">Search failed — you can still fill in the fields manually below.</div>`;
+    suggestionsBox.classList.remove('hidden');
+  }
+}
+
+async function handleAddEntry() {
+  const name = el('new-name').value.trim();
+  const address = el('new-address').value.trim();
+  const errBox = el('add-error');
+  errBox.textContent = '';
+  if (!name || !address) { errBox.textContent = 'Fill in both the name and address.'; return; }
+  const btn = el('geocode-save-btn');
+  btn.disabled = true;
+
+  try {
+    let lat, lng;
+    if (selectedPlace) {
+      // Coordinates already known from the picked suggestion — no extra lookup needed.
+      ({ lat, lng } = selectedPlace);
+    } else {
+      // Manual entry (no suggestion picked) — geocode the typed address as a fallback.
+      btn.textContent = 'Looking up address...';
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`);
+      const results = await resp.json();
+      if (!results.length) {
+        errBox.textContent = "Couldn't find that address — try adding city/state, or check spelling.";
+        btn.disabled = false; btn.textContent = 'Save place';
+        return;
+      }
+      lat = parseFloat(results[0].lat);
+      lng = parseFloat(results[0].lon);
+    }
+    await addDoc(collection(db, 'restaurants'), {
+      name,
+      address,
+      lat,
+      lng,
+      addedBy: currentUser.email,
+      createdAt: serverTimestamp()
+    });
+    closePanel();
+  } catch (err) {
+    errBox.textContent = "Something went wrong saving that place. Try again.";
+    btn.disabled = false; btn.textContent = 'Save place';
+  }
+}
+
+// ---------------- panel: account ----------------
+function openAccountPanel() {
+  activeRestaurantId = null;
+  panelMode = 'account';
+  const me = users.find(u => u.id === currentUser.uid);
+  const myName = (me && me.displayName) || currentUser.email.split('@')[0];
+  const myReviews = reviews.filter(rv => rv.userId === currentUser.uid);
+
+  panelBody.innerHTML = `
+    <div class="panel-wrap">
+      <button class="close-x" id="panel-close">&times;</button>
+      <h2>Your account</h2>
+      <div class="sub">${escapeHtml(currentUser.email)}</div>
+
+      <div class="field">
+        <label>Display name</label>
+        <input type="text" id="display-name-input" value="${escapeHtml(myName)}">
+      </div>
+      <button class="btn small" id="save-display-name-btn">Save name</button>
+      <div class="error-msg" id="account-error"></div>
+
+      <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
+
+      <div class="sub" style="margin-bottom:8px;">Your reviews (${myReviews.length})</div>
+      <div class="review-list">
+        ${myReviews.length ? myReviews.map(rv => {
+          const restaurant = restaurants.find(r => r.id === rv.restaurantId);
+          return `
+            <div class="review-item">
+              <div class="who">
+                <span>${escapeHtml(restaurant ? restaurant.name : 'Unknown place')}</span>
+                <span>${rv.rating.toFixed(1)}/10</span>
+              </div>
+              <div class="breakdown">
+                Burger ${Number(rv.burgerRating ?? rv.rating).toFixed(1)} ·
+                Sides/Drinks ${Number(rv.sidesRating ?? rv.rating).toFixed(1)} ·
+                Establishment ${Number(rv.establishmentRating ?? rv.rating).toFixed(1)}
+              </div>
+              ${rv.comment ? `<div class="comment">${escapeHtml(rv.comment)}</div>` : ''}
+              <div class="my-review-actions">
+                <button class="btn ghost small" data-goto="${rv.restaurantId}">Edit</button>
+                <button class="btn red small" data-del="${rv.id}">Delete</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `<div class="count-tag">You haven't reviewed anywhere yet.</div>`}
+      </div>
+    </div>
+  `;
+  panelOverlay.classList.add('open');
+
+  el('panel-close').addEventListener('click', closePanel);
+
+  el('save-display-name-btn').addEventListener('click', async () => {
+    const errBox = el('account-error');
+    errBox.textContent = '';
+    const newName = el('display-name-input').value.trim();
+    if (!newName) { errBox.textContent = 'Enter a name.'; return; }
+    try {
+      await setDoc(doc(db, 'users', currentUser.uid), { displayName: newName, email: currentUser.email }, { merge: true });
+    } catch (err) {
+      errBox.textContent = "Couldn't save — try again.";
+    }
+  });
+
+  panelBody.querySelectorAll('[data-goto]').forEach(btn => {
+    btn.addEventListener('click', () => openDetailPanel(btn.dataset.goto));
+  });
+  panelBody.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this review?')) return;
+      await deleteDoc(doc(db, 'reviews', btn.dataset.del));
+    });
+  });
+}
