@@ -106,15 +106,27 @@ function avgRating(restaurantId) {
   if (!rs.length) return null;
   return rs.reduce((s, r) => s + r.rating, 0) / rs.length;
 }
-function meterHtml(rating, max = 5) {
+function meterHtml(rating, max = 10) {
   const pct = Math.max(0, Math.min(100, (rating / max) * 100));
   return `<div class="meter-row">
     <div class="burger-meter" style="--pct:${pct}%"></div>
-    <div class="meter-num">${rating.toFixed(1)}</div>
+    <div class="meter-num">${rating.toFixed(1)}<span class="meter-max">/10</span></div>
   </div>`;
 }
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function sliderField(cat, label, value) {
+  const v = (value ?? 5.0);
+  return `
+    <div class="field">
+      <label>${label}</label>
+      <div class="slider-row">
+        <input type="range" min="1" max="10" step="0.1" value="${v}" data-cat="${cat}" class="burger-slider">
+        <span class="slider-num" data-cat="${cat}">${Number(v).toFixed(1)}</span>
+      </div>
+    </div>
+  `;
 }
 
 // ---------------- sidebar list ----------------
@@ -199,7 +211,7 @@ function buildPopupHtml(r) {
   const rowsHtml = rs.length
     ? rs.map(rv => `<div class="popup-review-row">
         <span>${escapeHtml(rv.userName || 'Someone')}</span>
-        <span>${rv.rating.toFixed(1)} 🍔</span>
+        <span>${rv.rating.toFixed(1)}/10</span>
       </div>`).join('')
     : `<div class="popup-review-row"><span>No reviews yet</span></div>`;
   return `
@@ -245,7 +257,12 @@ function renderDetailPanel(restaurantId) {
           <div class="review-item">
             <div class="who">
               <span>${escapeHtml(rv.userName || 'Someone')}</span>
-              <span>${rv.rating.toFixed(1)} 🍔</span>
+              <span>${rv.rating.toFixed(1)}/10</span>
+            </div>
+            <div class="breakdown">
+              Burger ${Number(rv.burgerRating ?? rv.rating).toFixed(1)} ·
+              Sides/Drinks ${Number(rv.sidesRating ?? rv.rating).toFixed(1)} ·
+              Establishment ${Number(rv.establishmentRating ?? rv.rating).toFixed(1)}
             </div>
             ${rv.comment ? `<div class="comment">${escapeHtml(rv.comment)}</div>` : ''}
           </div>
@@ -254,12 +271,10 @@ function renderDetailPanel(restaurantId) {
 
       <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
 
-      <div class="field">
-        <label>Your rating</label>
-        <div class="rating-picker" id="rating-picker">
-          ${[1,2,3,4,5].map(n => `<button type="button" data-val="${n}" class="${myReview && myReview.rating === n ? 'selected' : ''}">${n}</button>`).join('')}
-        </div>
-      </div>
+      ${sliderField('burger', 'Burger', myReview?.burgerRating)}
+      ${sliderField('sides', 'Sides / Drinks', myReview?.sidesRating)}
+      ${sliderField('establishment', 'Establishment', myReview?.establishmentRating)}
+
       <div class="field">
         <label>Notes (optional)</label>
         <textarea id="review-comment" placeholder="What'd you get, how was it...">${escapeHtml(myReview?.comment || '')}</textarea>
@@ -273,27 +288,39 @@ function renderDetailPanel(restaurantId) {
     </div>
   `;
 
-  let selectedRating = myReview?.rating || 0;
+  const selectedRatings = {
+    burger: myReview?.burgerRating ?? 5.0,
+    sides: myReview?.sidesRating ?? 5.0,
+    establishment: myReview?.establishmentRating ?? 5.0
+  };
+
   el('panel-close').addEventListener('click', closePanel);
-  el('rating-picker').querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectedRating = Number(btn.dataset.val);
-      el('rating-picker').querySelectorAll('button').forEach(b => b.classList.toggle('selected', Number(b.dataset.val) === selectedRating));
+
+  ['burger', 'sides', 'establishment'].forEach(cat => {
+    const input = document.querySelector(`input[data-cat="${cat}"]`);
+    const readout = document.querySelector(`.slider-num[data-cat="${cat}"]`);
+    input.addEventListener('input', () => {
+      const val = parseFloat(input.value);
+      selectedRatings[cat] = val;
+      readout.textContent = val.toFixed(1);
     });
   });
 
   el('save-review-btn').addEventListener('click', async () => {
     const errBox = el('review-error');
     errBox.textContent = '';
-    if (!selectedRating) { errBox.textContent = 'Pick a rating from 1–5 first.'; return; }
     const comment = el('review-comment').value.trim();
+    const overall = (selectedRatings.burger + selectedRatings.sides + selectedRatings.establishment) / 3;
     const reviewId = `${restaurantId}_${currentUser.uid}`;
     try {
       await setDoc(doc(db, 'reviews', reviewId), {
         restaurantId,
         userId: currentUser.uid,
         userName: currentUser.email.split('@')[0],
-        rating: selectedRating,
+        burgerRating: selectedRatings.burger,
+        sidesRating: selectedRatings.sides,
+        establishmentRating: selectedRatings.establishment,
+        rating: Math.round(overall * 10) / 10,
         comment,
         updatedAt: serverTimestamp()
       });
