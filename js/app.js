@@ -527,7 +527,7 @@ function renderDetailPanel(restaurantId) {
       <div class="panel-actions">
         <button class="btn" id="save-review-btn">${myReview ? 'Update your review' : 'Save your review'}</button>
         ${myReview ? '<button class="btn red small" id="delete-review-btn">Delete</button>' : ''}
-        ${isAdmin ? '<button class="btn ghost small" id="delete-entry-btn" title="Remove this place entirely">Remove place</button>' : ''}
+        ${isAdmin ? '<button class="btn ghost-panel small" id="delete-entry-btn" title="Remove this place entirely">Remove place</button>' : ''}
       </div>
       <div class="error-msg" id="review-error"></div>
     </div>
@@ -547,7 +547,7 @@ function renderDetailPanel(restaurantId) {
       <div class="name-edit-row" id="name-edit-row">
         <input type="text" id="edit-name-input" value="${escapeHtml(r.name)}">
         <button class="btn small" id="save-name-btn">Save</button>
-        <button class="btn ghost small" id="cancel-name-btn">Cancel</button>
+        <button class="btn ghost-panel small" id="cancel-name-btn">Cancel</button>
       </div>
     `;
     el('edit-name-input').focus();
@@ -778,7 +778,7 @@ function openAccountPanel() {
           <span class="cp-label">Club Position</span>
           <span class="cp-value" id="cp-value">${escapeHtml((me && me.clubPosition) || 'Member')}</span>
         </div>
-        <button class="btn ghost small" id="reroll-position-btn" title="Get a new random title">🎲 Re-roll</button>
+        <button class="btn ghost-panel small" id="reroll-position-btn" title="Get a new random title">🎲 Re-roll</button>
       </div>
 
       <div class="field">
@@ -807,7 +807,7 @@ function openAccountPanel() {
               </div>
               ${rv.comment ? `<div class="comment">${escapeHtml(rv.comment)}</div>` : ''}
               <div class="my-review-actions">
-                <button class="btn ghost small" data-goto="${rv.restaurantId}">Edit</button>
+                <button class="btn ghost-panel small" data-goto="${rv.restaurantId}">Edit</button>
                 <button class="btn red small" data-del="${rv.id}">Delete</button>
               </div>
             </div>
