@@ -44,7 +44,38 @@ const CLUB_POSITIONS = [
   'Regional Manager, Sauce Division',
   'Keeper of the Secret Menu',
   'Chief Doneness Officer',
-  'Lead Napkin Distribution Strategist'
+  'Lead Napkin Distribution Strategist',
+  'Director of Char Marks',
+  'Chief Lettuce Crispness Officer',
+  'VP of Bacon Integration',
+  'Head of Ranch Diplomacy',
+  'Executive Bun Softness Auditor',
+  'Chief Flipping Officer',
+  'Minister of Melt Consistency',
+  'Senior Squeeze Bottle Technician',
+  'Director of Combo Upsizing',
+  'Chief Patty Symmetry Officer',
+  'VP of Drive-Thru Relations',
+  'Head Curator, Wall of Fame',
+  'Chief Spice Level Regulator',
+  'Sultan of Special Sauce',
+  'Assistant to the Grillmaster',
+  'Director of Late-Night Cravings',
+  'Chief Value Meal Strategist',
+  'Guardian of the Deep Fryer',
+  'Vice Chair, Toothpick Committee',
+  'Head of Booth Seating Logistics',
+  'Chief Onion Breath Ambassador',
+  'Director of Bun-to-Patty Ratio',
+  'Senior Ketchup Packet Wrangler',
+  'Chief Mustard Diplomat',
+  'Head of Crouton-Adjacent Affairs',
+  'VP of Second Helpings',
+  'Minister of Rare Toppings',
+  'Chief Combo Meal Cartographer',
+  'Director of Grease Stain Prevention',
+  'Executive Ice Cube Officer',
+  'Chief Bun Seed Density Officer'
 ];
 
 // ---------------- DOM ----------------
@@ -153,6 +184,10 @@ function refreshOpenPanel() {
 function displayNameFor(userId, fallback) {
   const u = users.find(x => x.id === userId);
   return (u && u.displayName) ? u.displayName : (fallback || 'Someone');
+}
+function positionFor(userId) {
+  const u = users.find(x => x.id === userId);
+  return (u && u.clubPosition) || null;
 }
 
 // ---------------- helpers ----------------
@@ -317,7 +352,7 @@ function renderDetailPanel(restaurantId) {
         ${rs.map(rv => `
           <div class="review-item">
             <div class="who">
-              <span>${escapeHtml(displayNameFor(rv.userId, rv.userName))}</span>
+              <span class="who-name">${escapeHtml(displayNameFor(rv.userId, rv.userName))}${positionFor(rv.userId) ? ` <span class="who-badge">${escapeHtml(positionFor(rv.userId))}</span>` : ''}</span>
               <span>${rv.rating.toFixed(1)}/10</span>
             </div>
             <div class="breakdown">
@@ -590,8 +625,11 @@ function openAccountPanel() {
       <div class="sub">${escapeHtml(currentUser.email)}</div>
 
       <div class="club-position">
-        <span class="cp-label">Club Position</span>
-        <span class="cp-value">${escapeHtml((me && me.clubPosition) || 'Member')}</span>
+        <div class="cp-text">
+          <span class="cp-label">Club Position</span>
+          <span class="cp-value" id="cp-value">${escapeHtml((me && me.clubPosition) || 'Member')}</span>
+        </div>
+        <button class="btn ghost small" id="reroll-position-btn" title="Get a new random title">🎲 Re-roll</button>
       </div>
 
       <div class="field">
@@ -632,6 +670,18 @@ function openAccountPanel() {
   panelOverlay.classList.add('open');
 
   el('panel-close').addEventListener('click', closePanel);
+
+  el('reroll-position-btn').addEventListener('click', async () => {
+    const current = (me && me.clubPosition) || null;
+    let next = current;
+    while (next === current) {
+      next = CLUB_POSITIONS[Math.floor(Math.random() * CLUB_POSITIONS.length)];
+    }
+    el('cp-value').textContent = next;
+    try {
+      await setDoc(doc(db, 'users', currentUser.uid), { clubPosition: next }, { merge: true });
+    } catch (err) { /* non-critical */ }
+  });
 
   el('save-display-name-btn').addEventListener('click', async () => {
     const errBox = el('account-error');
