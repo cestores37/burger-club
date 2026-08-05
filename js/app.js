@@ -102,6 +102,20 @@ function setSidebarTab(tab) {
   leaderboardView.classList.toggle('hidden', tab !== 'leaderboard');
 }
 
+// ---------------- mobile sidebar drawer ----------------
+const sidebarEl = el('sidebar');
+const sidebarBackdrop = el('sidebar-backdrop');
+function openSidebar() {
+  sidebarEl.classList.add('open');
+  sidebarBackdrop.classList.add('open');
+}
+function closeSidebar() {
+  sidebarEl.classList.remove('open');
+  sidebarBackdrop.classList.remove('open');
+}
+el('menu-toggle').addEventListener('click', openSidebar);
+sidebarBackdrop.addEventListener('click', closeSidebar);
+
 // ---------------- auth ----------------
 el('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -265,6 +279,7 @@ function renderEntryList() {
         map.flyTo(markers.get(r.id).getLatLng(), 15, { duration: 0.6 });
         markers.get(r.id).openPopup();
       }
+      closeSidebar();
     });
     entryList.appendChild(card);
   });
@@ -323,10 +338,14 @@ function renderLeaderboard() {
         map.flyTo(markers.get(id).getLatLng(), 15, { duration: 0.6 });
         markers.get(id).openPopup();
       }
+      closeSidebar();
     });
   });
   leaderboardView.querySelectorAll('[data-user]').forEach(li => {
-    li.addEventListener('click', () => openUserProfilePanel(li.dataset.user));
+    li.addEventListener('click', () => {
+      openUserProfilePanel(li.dataset.user);
+      closeSidebar();
+    });
   });
 }
 
