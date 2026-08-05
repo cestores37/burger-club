@@ -141,6 +141,13 @@ button {
   border: 1px solid rgba(246,235,217,0.35);
   color: var(--paper);
 }
+.btn.ghost-panel {
+  background: transparent;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  opacity: 0.8;
+}
+.btn.ghost-panel:hover { opacity: 1; }
 .btn.red { background: var(--red); color: var(--white); }
 .btn.small { padding: 6px 12px; font-size: 12px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
