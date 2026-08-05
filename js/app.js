@@ -778,7 +778,7 @@ function openAccountPanel() {
           <span class="cp-label">Club Position</span>
           <span class="cp-value" id="cp-value">${escapeHtml((me && me.clubPosition) || 'Member')}</span>
         </div>
-        <button class="btn ghost-panel small" id="reroll-position-btn" title="Get a new random title">🎲 Re-roll</button>
+        <button class="btn small" id="reroll-position-btn" title="Get a new random title">🎲 Re-roll</button>
       </div>
 
       <div class="field">
