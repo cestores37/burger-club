@@ -89,6 +89,7 @@ const entryList = el('entry-list');
 const emptyState = el('empty-state');
 const leaderboardView = el('leaderboard-view');
 const addEntryBtn = el('add-entry-btn');
+const suggestEntryBtn = el('suggest-entry-btn');
 const panelOverlay = el('panel-overlay');
 const panelBody = el('panel-body');
 
@@ -154,6 +155,7 @@ onAuthStateChanged(auth, (user) => {
     el('account-btn').addEventListener('click', openAccountPanel);
     el('logout-btn-2').addEventListener('click', () => signOut(auth));
     addEntryBtn.classList.toggle('hidden', !isAdmin);
+    suggestEntryBtn.classList.toggle('hidden', isAdmin);
     initMapIfNeeded();
     subscribeData();
     ensureUserProfile(user);
@@ -253,35 +255,61 @@ function sliderField(cat, label, value) {
 }
 
 // ---------------- sidebar list ----------------
+function entryCardHtml(r) {
+  const isSuggested = r.status === 'suggested';
+  const avg = avgRating(r.id);
+  const count = reviewsFor(r.id).length;
+  return `
+    <div class="entry-card${isSuggested ? ' suggested' : ''}${r.id === activeRestaurantId ? ' active' : ''}" data-id="${r.id}">
+      <h3>${escapeHtml(r.name)}</h3>
+      <div class="addr">${escapeHtml(r.address || '')}</div>
+      ${isSuggested
+        ? `<div class="count-tag">Suggested by ${escapeHtml(r.suggestedByName || 'a member')}</div>`
+        : (avg !== null ? meterHtml(avg) : '<div class="count-tag">No ratings yet</div>')}
+      ${!isSuggested ? `<div class="entry-meta-row"><span class="count-tag">${count} review${count === 1 ? '' : 's'}</span></div>` : ''}
+    </div>
+  `;
+}
+
 function renderEntryList() {
-  entryList.innerHTML = '';
   if (!restaurants.length) {
+    entryList.innerHTML = '';
     emptyState.classList.remove('hidden');
     return;
   }
   emptyState.classList.add('hidden');
-  restaurants.forEach(r => {
-    const avg = avgRating(r.id);
-    const count = reviewsFor(r.id).length;
-    const card = document.createElement('div');
-    card.className = 'entry-card' + (r.id === activeRestaurantId ? ' active' : '');
-    card.innerHTML = `
-      <h3>${escapeHtml(r.name)}</h3>
-      <div class="addr">${escapeHtml(r.address || '')}</div>
-      ${avg !== null ? meterHtml(avg) : '<div class="count-tag">No ratings yet</div>'}
-      <div class="entry-meta-row">
-        <span class="count-tag">${count} review${count === 1 ? '' : 's'}</span>
-      </div>
-    `;
+
+  const active = restaurants.filter(r => r.status !== 'suggested');
+  const suggested = restaurants.filter(r => r.status === 'suggested');
+
+  const activeHtml = active.length
+    ? active.map(entryCardHtml).join('')
+    : `<div class="count-tag section-empty">No places reviewed yet.</div>`;
+  const suggestedHtml = suggested.length
+    ? suggested.map(entryCardHtml).join('')
+    : `<div class="count-tag section-empty">No suggestions yet.</div>`;
+
+  entryList.innerHTML = `
+    <div class="entry-section">
+      <h3 class="entry-section-header reviews-header">Reviews</h3>
+      ${activeHtml}
+    </div>
+    <div class="entry-section">
+      <h3 class="entry-section-header tbt-header">To Be Tested</h3>
+      ${suggestedHtml}
+    </div>
+  `;
+
+  entryList.querySelectorAll('.entry-card[data-id]').forEach(card => {
     card.addEventListener('click', () => {
-      openDetailPanel(r.id);
-      if (markers.has(r.id)) {
-        map.flyTo(markers.get(r.id).getLatLng(), 15, { duration: 0.6 });
-        markers.get(r.id).openPopup();
+      const id = card.dataset.id;
+      openDetailPanel(id);
+      if (markers.has(id)) {
+        map.flyTo(markers.get(id).getLatLng(), 15, { duration: 0.6 });
+        markers.get(id).openPopup();
       }
       closeSidebar();
     });
-    entryList.appendChild(card);
   });
 }
 
@@ -422,6 +450,16 @@ function burgerDivIcon() {
   });
 }
 
+function burgerDivIconSuggested() {
+  return L.divIcon({
+    className: '',
+    html: `<div class="burger-pin suggested"><span>🍔</span></div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 28],
+    popupAnchor: [0, -26]
+  });
+}
+
 function renderMarkers() {
   if (!map) return;
   const seen = new Set();
@@ -429,12 +467,14 @@ function renderMarkers() {
     if (typeof r.lat !== 'number' || typeof r.lng !== 'number') return;
     seen.add(r.id);
     const popupHtml = buildPopupHtml(r);
+    const icon = r.status === 'suggested' ? burgerDivIconSuggested() : burgerDivIcon();
     if (markers.has(r.id)) {
       const m = markers.get(r.id);
       m.setLatLng([r.lat, r.lng]);
       m.setPopupContent(popupHtml);
+      m.setIcon(icon);
     } else {
-      const m = L.marker([r.lat, r.lng], { icon: burgerDivIcon() }).addTo(map);
+      const m = L.marker([r.lat, r.lng], { icon }).addTo(map);
       m.bindPopup(popupHtml);
       m.on('click', () => openDetailPanel(r.id));
       markers.set(r.id, m);
@@ -447,6 +487,13 @@ function renderMarkers() {
 }
 
 function buildPopupHtml(r) {
+  if (r.status === 'suggested') {
+    return `
+      <div class="popup-title">${escapeHtml(r.name)}</div>
+      <div class="popup-addr">${escapeHtml(r.address || '')}</div>
+      <div class="popup-suggested-tag">🔵 Suggested by ${escapeHtml(r.suggestedByName || 'a member')}</div>
+    `;
+  }
   const rs = reviewsFor(r.id);
   const avg = avgRating(r.id);
   const rowsHtml = rs.length
@@ -483,9 +530,49 @@ el('panel-overlay').addEventListener('click', (e) => {
   if (e.target === panelOverlay) closePanel();
 });
 
+function renderSuggestionPanel(r, restaurantId) {
+  panelBody.innerHTML = `
+    <div class="panel-wrap">
+      <button class="close-x" id="panel-close">&times;</button>
+      <h2>${escapeHtml(r.name)}</h2>
+      <div class="sub">${escapeHtml(r.address || '')}</div>
+      <div class="suggestion-tag">🔵 Suggested by ${escapeHtml(r.suggestedByName || 'a member')}</div>
+      <p class="count-tag" style="margin:16px 0;">This place hasn't been added for reviews yet.</p>
+      ${isAdmin ? `
+        <div class="panel-actions">
+          <button class="btn" id="promote-btn">Add to Places</button>
+          <button class="btn red small" id="remove-suggestion-btn">Remove</button>
+        </div>
+      ` : ''}
+      <div class="error-msg" id="suggestion-error"></div>
+    </div>
+  `;
+  panelOverlay.classList.add('open');
+  el('panel-close').addEventListener('click', closePanel);
+
+  if (isAdmin) {
+    el('promote-btn').addEventListener('click', async () => {
+      const errBox = el('suggestion-error');
+      errBox.textContent = '';
+      try {
+        await updateDoc(doc(db, 'restaurants', restaurantId), { status: 'active', promotedAt: serverTimestamp() });
+        // refreshOpenPanel will re-render this same panel as a full review view automatically.
+      } catch (err) {
+        errBox.textContent = "Couldn't add it — try again.";
+      }
+    });
+    el('remove-suggestion-btn').addEventListener('click', async () => {
+      if (!confirm(`Remove the suggestion "${r.name}"?`)) return;
+      await deleteDoc(doc(db, 'restaurants', restaurantId));
+      closePanel();
+    });
+  }
+}
+
 function renderDetailPanel(restaurantId) {
   const r = restaurants.find(x => x.id === restaurantId);
   if (!r) { closePanel(); return; }
+  if (r.status === 'suggested') { renderSuggestionPanel(r, restaurantId); return; }
   const rs = reviewsFor(restaurantId);
   const myReview = rs.find(rv => rv.userId === currentUser?.uid);
   const avg = avgRating(restaurantId);
@@ -613,20 +700,24 @@ function renderDetailPanel(restaurantId) {
   }
 }
 
-// ---------------- panel: add entry (admin) ----------------
+// ---------------- panel: add / suggest a place ----------------
 let selectedPlace = null; // {lat, lng} set once a suggestion is picked
 let searchDebounceId = null;
 let searchRequestSeq = 0;
+let placeFormMode = 'add'; // 'add' (admin, goes straight to Reviews) | 'suggest' (member, goes to To Be Tested)
 
-addEntryBtn.addEventListener('click', () => {
+function openPlaceFormPanel(mode) {
   activeRestaurantId = null;
-  panelMode = 'add';
+  activeUserId = null;
+  panelMode = 'placeform';
+  placeFormMode = mode;
   selectedPlace = null;
+  const isSuggest = mode === 'suggest';
   panelBody.innerHTML = `
     <div class="panel-wrap">
       <button class="close-x" id="panel-close">&times;</button>
-      <h2>Add a place</h2>
-      <div class="sub">Start typing — pick a match and the address fills in automatically.</div>
+      <h2>${isSuggest ? 'Suggest a place' : 'Add a place'}</h2>
+      <div class="sub">${isSuggest ? "Know somewhere we should try? Search for it below and it'll show up under To Be Tested." : "Start typing — pick a match and the address fills in automatically."}</div>
       <div class="field" style="position:relative;">
         <label>Search</label>
         <input type="text" id="place-search" placeholder="e.g. Big Al's Burgers" autocomplete="off">
@@ -641,7 +732,7 @@ addEntryBtn.addEventListener('click', () => {
         <input type="text" id="new-address" placeholder="123 Main St, Brooklyn, NY">
       </div>
       <div class="panel-actions">
-        <button class="btn" id="geocode-save-btn">Save place</button>
+        <button class="btn" id="geocode-save-btn">${isSuggest ? 'Submit suggestion' : 'Save place'}</button>
       </div>
       <div class="error-msg" id="add-error"></div>
     </div>
@@ -670,7 +761,10 @@ addEntryBtn.addEventListener('click', () => {
       suggestionsBox.classList.add('hidden');
     }
   });
-});
+}
+
+addEntryBtn.addEventListener('click', () => openPlaceFormPanel('add'));
+suggestEntryBtn.addEventListener('click', () => openPlaceFormPanel('suggest'));
 
 async function runPlaceSearch(q, suggestionsBox) {
   const seq = ++searchRequestSeq;
@@ -718,6 +812,8 @@ async function runPlaceSearch(q, suggestionsBox) {
 }
 
 async function handleAddEntry() {
+  const isSuggest = placeFormMode === 'suggest';
+  const defaultLabel = isSuggest ? 'Submit suggestion' : 'Save place';
   const name = el('new-name').value.trim();
   const address = el('new-address').value.trim();
   const errBox = el('add-error');
@@ -738,24 +834,31 @@ async function handleAddEntry() {
       const results = await resp.json();
       if (!results.length) {
         errBox.textContent = "Couldn't find that address — try adding city/state, or check spelling.";
-        btn.disabled = false; btn.textContent = 'Save place';
+        btn.disabled = false; btn.textContent = defaultLabel;
         return;
       }
       lat = parseFloat(results[0].lat);
       lng = parseFloat(results[0].lon);
     }
-    await addDoc(collection(db, 'restaurants'), {
+    const payload = {
       name,
       address,
       lat,
       lng,
       addedBy: currentUser.email,
       createdAt: serverTimestamp()
-    });
+    };
+    if (isSuggest) {
+      payload.status = 'suggested';
+      payload.suggestedByName = displayNameFor(currentUser.uid, currentUser.email.split('@')[0]);
+    } else {
+      payload.status = 'active';
+    }
+    await addDoc(collection(db, 'restaurants'), payload);
     closePanel();
   } catch (err) {
     errBox.textContent = "Something went wrong saving that place. Try again.";
-    btn.disabled = false; btn.textContent = 'Save place';
+    btn.disabled = false; btn.textContent = defaultLabel;
   }
 }
 
