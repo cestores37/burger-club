@@ -48,8 +48,6 @@ el('login-form').addEventListener('submit', async (e) => {
   }
 });
 
-el('logout-btn').addEventListener('click', () => signOut(auth));
-
 function friendlyAuthError(err) {
   const code = err.code || '';
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
