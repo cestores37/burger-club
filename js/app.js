@@ -5,7 +5,7 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, doc, onSnapshot, addDoc, setDoc, deleteDoc,
+  getFirestore, collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc,
   serverTimestamp, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -18,9 +18,11 @@ let currentUser = null;
 let isAdmin = false;
 let restaurants = [];   // [{id, name, address, lat, lng, ...}]
 let reviews = [];        // [{id, restaurantId, userId, userName, rating, comment}]
+let users = [];          // [{id (uid), email, displayName}]
 let map = null;
 let markers = new Map(); // restaurantId -> leaflet marker
 let activeRestaurantId = null;
+let panelMode = null; // 'detail' | 'add' | 'account'
 
 // ---------------- DOM ----------------
 const el = (id) => document.getElementById(id);
@@ -66,12 +68,16 @@ onAuthStateChanged(auth, (user) => {
     topbar.classList.remove('hidden');
     userChip.innerHTML = `
       <span class="email">${escapeHtml(user.email)}${isAdmin ? ' · admin' : ''}</span>
+      <button class="btn ghost small" id="account-btn">Account</button>
       <button class="btn ghost small" id="logout-btn-2">Log out</button>
     `;
+    el('account-btn').addEventListener('click', openAccountPanel);
     el('logout-btn-2').addEventListener('click', () => signOut(auth));
     addEntryBtn.classList.toggle('hidden', !isAdmin);
     initMapIfNeeded();
     subscribeData();
+    // Ensure a profile doc exists (doesn't overwrite an existing displayName)
+    setDoc(doc(db, 'users', user.uid), { email: user.email }, { merge: true }).catch(() => {});
   } else {
     loginScreen.classList.remove('hidden');
     appShell.classList.add('hidden');
@@ -86,15 +92,32 @@ function subscribeData() {
     restaurants = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderEntryList();
     renderMarkers();
-    if (activeRestaurantId) renderDetailPanel(activeRestaurantId);
+    refreshOpenPanel();
   });
 
   onSnapshot(collection(db, 'reviews'), (snap) => {
     reviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderEntryList();
     renderMarkers();
-    if (activeRestaurantId) renderDetailPanel(activeRestaurantId);
+    refreshOpenPanel();
   });
+
+  onSnapshot(collection(db, 'users'), (snap) => {
+    users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderEntryList();
+    renderMarkers();
+    refreshOpenPanel();
+  });
+}
+
+function refreshOpenPanel() {
+  if (panelMode === 'detail' && activeRestaurantId) renderDetailPanel(activeRestaurantId);
+  if (panelMode === 'account') openAccountPanel();
+}
+
+function displayNameFor(userId, fallback) {
+  const u = users.find(x => x.id === userId);
+  return (u && u.displayName) ? u.displayName : (fallback || 'Someone');
 }
 
 // ---------------- helpers ----------------
@@ -211,7 +234,7 @@ function buildPopupHtml(r) {
   const avg = avgRating(r.id);
   const rowsHtml = rs.length
     ? rs.map(rv => `<div class="popup-review-row">
-        <span>${escapeHtml(rv.userName || 'Someone')}</span>
+        <span>${escapeHtml(displayNameFor(rv.userId, rv.userName))}</span>
         <span>${rv.rating.toFixed(1)}/10</span>
       </div>`).join('')
     : `<div class="popup-review-row"><span>No reviews yet</span></div>`;
@@ -226,6 +249,7 @@ function buildPopupHtml(r) {
 // ---------------- panel: detail + review form ----------------
 function openDetailPanel(restaurantId) {
   activeRestaurantId = restaurantId;
+  panelMode = 'detail';
   renderDetailPanel(restaurantId);
   panelOverlay.classList.add('open');
   renderEntryList();
@@ -234,6 +258,7 @@ function openDetailPanel(restaurantId) {
 function closePanel() {
   panelOverlay.classList.remove('open');
   activeRestaurantId = null;
+  panelMode = null;
 }
 el('panel-overlay').addEventListener('click', (e) => {
   if (e.target === panelOverlay) closePanel();
@@ -249,7 +274,7 @@ function renderDetailPanel(restaurantId) {
   panelBody.innerHTML = `
     <div class="panel-wrap">
       <button class="close-x" id="panel-close">&times;</button>
-      <h2>${escapeHtml(r.name)}</h2>
+      <h2 id="name-display">${escapeHtml(r.name)}${isAdmin ? ' <button class="edit-name-btn" id="edit-name-btn" title="Edit name">✏️</button>' : ''}</h2>
       <div class="sub">${escapeHtml(r.address || '')}</div>
       ${avg !== null ? meterHtml(avg) : '<div class="count-tag">No ratings yet — be the first</div>'}
 
@@ -257,7 +282,7 @@ function renderDetailPanel(restaurantId) {
         ${rs.map(rv => `
           <div class="review-item">
             <div class="who">
-              <span>${escapeHtml(rv.userName || 'Someone')}</span>
+              <span>${escapeHtml(displayNameFor(rv.userId, rv.userName))}</span>
               <span>${rv.rating.toFixed(1)}/10</span>
             </div>
             <div class="breakdown">
@@ -269,139 +294,3 @@ function renderDetailPanel(restaurantId) {
           </div>
         `).join('') || ''}
       </div>
-
-      <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
-
-      ${sliderField('burger', 'Burger', myReview?.burgerRating)}
-      ${sliderField('sides', 'Sides / Drinks', myReview?.sidesRating)}
-      ${sliderField('establishment', 'Establishment', myReview?.establishmentRating)}
-
-      <div class="field">
-        <label>Notes (optional)</label>
-        <textarea id="review-comment" placeholder="What'd you get, how was it...">${escapeHtml(myReview?.comment || '')}</textarea>
-      </div>
-      <div class="panel-actions">
-        <button class="btn" id="save-review-btn">${myReview ? 'Update your review' : 'Save your review'}</button>
-        ${myReview ? '<button class="btn red small" id="delete-review-btn">Delete</button>' : ''}
-        ${isAdmin ? '<button class="btn ghost small" id="delete-entry-btn" title="Remove this place entirely">Remove place</button>' : ''}
-      </div>
-      <div class="error-msg" id="review-error"></div>
-    </div>
-  `;
-
-  const selectedRatings = {
-    burger: myReview?.burgerRating ?? 5.0,
-    sides: myReview?.sidesRating ?? 5.0,
-    establishment: myReview?.establishmentRating ?? 5.0
-  };
-
-  el('panel-close').addEventListener('click', closePanel);
-
-  ['burger', 'sides', 'establishment'].forEach(cat => {
-    const input = document.querySelector(`input[data-cat="${cat}"]`);
-    const readout = document.querySelector(`.slider-num[data-cat="${cat}"]`);
-    input.addEventListener('input', () => {
-      const val = parseFloat(input.value);
-      selectedRatings[cat] = val;
-      readout.textContent = val.toFixed(1);
-    });
-  });
-
-  el('save-review-btn').addEventListener('click', async () => {
-    const errBox = el('review-error');
-    errBox.textContent = '';
-    const comment = el('review-comment').value.trim();
-    const overall = (selectedRatings.burger + selectedRatings.sides + selectedRatings.establishment) / 3;
-    const reviewId = `${restaurantId}_${currentUser.uid}`;
-    try {
-      await setDoc(doc(db, 'reviews', reviewId), {
-        restaurantId,
-        userId: currentUser.uid,
-        userName: currentUser.email.split('@')[0],
-        burgerRating: selectedRatings.burger,
-        sidesRating: selectedRatings.sides,
-        establishmentRating: selectedRatings.establishment,
-        rating: Math.round(overall * 10) / 10,
-        comment,
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      errBox.textContent = "Couldn't save — check your connection and try again.";
-    }
-  });
-
-  if (myReview) {
-    el('delete-review-btn')?.addEventListener('click', async () => {
-      await deleteDoc(doc(db, 'reviews', `${restaurantId}_${currentUser.uid}`));
-    });
-  }
-
-  if (isAdmin) {
-    el('delete-entry-btn')?.addEventListener('click', async () => {
-      if (!confirm(`Remove "${r.name}" and all its reviews? This can't be undone.`)) return;
-      await Promise.all(rs.map(rv => deleteDoc(doc(db, 'reviews', rv.id))));
-      await deleteDoc(doc(db, 'restaurants', restaurantId));
-      closePanel();
-    });
-  }
-}
-
-// ---------------- panel: add entry (admin) ----------------
-addEntryBtn.addEventListener('click', () => {
-  activeRestaurantId = null;
-  panelBody.innerHTML = `
-    <div class="panel-wrap">
-      <button class="close-x" id="panel-close">&times;</button>
-      <h2>Add a place</h2>
-      <div class="sub">We'll look up the address to place it on the map.</div>
-      <div class="field">
-        <label>Name</label>
-        <input type="text" id="new-name" placeholder="e.g. Big Al's Burgers">
-      </div>
-      <div class="field">
-        <label>Address</label>
-        <input type="text" id="new-address" placeholder="123 Main St, Brooklyn, NY">
-      </div>
-      <div class="panel-actions">
-        <button class="btn" id="geocode-save-btn">Find on map &amp; save</button>
-      </div>
-      <div class="error-msg" id="add-error"></div>
-    </div>
-  `;
-  panelOverlay.classList.add('open');
-  el('panel-close').addEventListener('click', closePanel);
-  el('geocode-save-btn').addEventListener('click', handleAddEntry);
-});
-
-async function handleAddEntry() {
-  const name = el('new-name').value.trim();
-  const address = el('new-address').value.trim();
-  const errBox = el('add-error');
-  errBox.textContent = '';
-  if (!name || !address) { errBox.textContent = 'Fill in both fields.'; return; }
-  const btn = el('geocode-save-btn');
-  btn.disabled = true;
-  btn.textContent = 'Looking up address...';
-  try {
-    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`);
-    const results = await resp.json();
-    if (!results.length) {
-      errBox.textContent = "Couldn't find that address — try adding city/state, or check spelling.";
-      btn.disabled = false; btn.textContent = 'Find on map & save';
-      return;
-    }
-    const { lat, lon } = results[0];
-    await addDoc(collection(db, 'restaurants'), {
-      name,
-      address,
-      lat: parseFloat(lat),
-      lng: parseFloat(lon),
-      addedBy: currentUser.email,
-      createdAt: serverTimestamp()
-    });
-    closePanel();
-  } catch (err) {
-    errBox.textContent = "Something went wrong looking up that address. Try again.";
-    btn.disabled = false; btn.textContent = 'Find on map & save';
-  }
-}
