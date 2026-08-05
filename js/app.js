@@ -5,7 +5,7 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc,
+  getFirestore, collection, doc, getDoc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc,
   serverTimestamp, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -23,6 +23,29 @@ let map = null;
 let markers = new Map(); // restaurantId -> leaflet marker
 let activeRestaurantId = null;
 let panelMode = null; // 'detail' | 'add' | 'account'
+
+const CLUB_POSITIONS = [
+  'Grillmaster General',
+  'Chief Condiment Officer',
+  'VP of Bun Quality',
+  'Head of Pickle Relations',
+  'Director of Extra Cheese',
+  'Secretary of Secret Sauce',
+  'Minister of Medium Rare',
+  'Chairperson of Combo Meals',
+  'Ambassador to Ketchup',
+  'Senior Fry Analyst',
+  'Chief Napkin Officer',
+  'Director of Onion Ring Affairs',
+  'Head Bun Toaster',
+  'Vice President of Toppings',
+  'Chief Sesame Seed Inspector',
+  'Milkshake Sommelier',
+  'Regional Manager, Sauce Division',
+  'Keeper of the Secret Menu',
+  'Chief Doneness Officer',
+  'Lead Napkin Distribution Strategist'
+];
 
 // ---------------- DOM ----------------
 const el = (id) => document.getElementById(id);
@@ -76,8 +99,7 @@ onAuthStateChanged(auth, (user) => {
     addEntryBtn.classList.toggle('hidden', !isAdmin);
     initMapIfNeeded();
     subscribeData();
-    // Ensure a profile doc exists (doesn't overwrite an existing displayName)
-    setDoc(doc(db, 'users', user.uid), { email: user.email }, { merge: true }).catch(() => {});
+    ensureUserProfile(user);
   } else {
     loginScreen.classList.remove('hidden');
     appShell.classList.add('hidden');
@@ -87,6 +109,19 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ---------------- Firestore subscriptions ----------------
+async function ensureUserProfile(user) {
+  try {
+    const ref = doc(db, 'users', user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists() || !snap.data().clubPosition) {
+      const position = CLUB_POSITIONS[Math.floor(Math.random() * CLUB_POSITIONS.length)];
+      await setDoc(ref, { email: user.email, clubPosition: position }, { merge: true });
+    } else {
+      await setDoc(ref, { email: user.email }, { merge: true });
+    }
+  } catch (err) { /* non-critical, ignore */ }
+}
+
 function subscribeData() {
   onSnapshot(query(collection(db, 'restaurants'), orderBy('name')), (snap) => {
     restaurants = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -553,6 +588,11 @@ function openAccountPanel() {
       <button class="close-x" id="panel-close">&times;</button>
       <h2>Your account</h2>
       <div class="sub">${escapeHtml(currentUser.email)}</div>
+
+      <div class="club-position">
+        <span class="cp-label">Club Position</span>
+        <span class="cp-value">${escapeHtml((me && me.clubPosition) || 'Member')}</span>
+      </div>
 
       <div class="field">
         <label>Display name</label>
