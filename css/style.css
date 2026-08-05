@@ -338,13 +338,20 @@ button {
 
 .club-position {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   background: var(--white);
   border: 1px solid var(--ink);
   border-radius: 8px;
   padding: 10px 14px;
   margin-bottom: 16px;
+}
+.club-position .cp-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 .club-position .cp-label {
   font-family: 'JetBrains Mono', monospace;
@@ -359,6 +366,7 @@ button {
   color: var(--red);
   letter-spacing: 0.2px;
 }
+#reroll-position-btn { flex-shrink: 0; white-space: nowrap; }
 
 .edit-name-btn {
   background: none;
@@ -555,9 +563,25 @@ button {
 .review-item .who {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   font-weight: 700;
   font-size: 13px;
   margin-bottom: 4px;
+  gap: 10px;
+}
+.who-name { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.who-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--red);
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 .review-item .comment { font-size: 13px; opacity: 0.85; margin-top: 4px; }
 
