@@ -22,7 +22,8 @@ let users = [];          // [{id (uid), email, displayName}]
 let map = null;
 let markers = new Map(); // restaurantId -> leaflet marker
 let activeRestaurantId = null;
-let panelMode = null; // 'detail' | 'add' | 'account'
+let activeUserId = null;
+let panelMode = null; // 'detail' | 'add' | 'account' | 'user'
 
 const CLUB_POSITIONS = [
   'Grillmaster General',
@@ -86,9 +87,20 @@ const topbar = el('topbar');
 const userChip = el('user-chip');
 const entryList = el('entry-list');
 const emptyState = el('empty-state');
+const leaderboardView = el('leaderboard-view');
 const addEntryBtn = el('add-entry-btn');
 const panelOverlay = el('panel-overlay');
 const panelBody = el('panel-body');
+
+el('tab-places').addEventListener('click', () => setSidebarTab('places'));
+el('tab-leaderboard').addEventListener('click', () => setSidebarTab('leaderboard'));
+
+function setSidebarTab(tab) {
+  el('tab-places').classList.toggle('active', tab === 'places');
+  el('tab-leaderboard').classList.toggle('active', tab === 'leaderboard');
+  el('places-view').classList.toggle('hidden', tab !== 'places');
+  leaderboardView.classList.toggle('hidden', tab !== 'leaderboard');
+}
 
 // ---------------- auth ----------------
 el('login-form').addEventListener('submit', async (e) => {
@@ -158,6 +170,7 @@ function subscribeData() {
     restaurants = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderEntryList();
     renderMarkers();
+    renderLeaderboard();
     refreshOpenPanel();
   });
 
@@ -165,6 +178,7 @@ function subscribeData() {
     reviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderEntryList();
     renderMarkers();
+    renderLeaderboard();
     refreshOpenPanel();
   });
 
@@ -172,6 +186,7 @@ function subscribeData() {
     users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderEntryList();
     renderMarkers();
+    renderLeaderboard();
     refreshOpenPanel();
   });
 }
@@ -179,6 +194,7 @@ function subscribeData() {
 function refreshOpenPanel() {
   if (panelMode === 'detail' && activeRestaurantId) renderDetailPanel(activeRestaurantId);
   if (panelMode === 'account') openAccountPanel();
+  if (panelMode === 'user' && activeUserId) openUserProfilePanel(activeUserId);
 }
 
 function displayNameFor(userId, fallback) {
@@ -254,6 +270,118 @@ function renderEntryList() {
   });
 }
 
+// ---------------- leaderboard ----------------
+function renderLeaderboard() {
+  const ranked = restaurants
+    .map(r => ({ r, avg: avgRating(r.id), count: reviewsFor(r.id).length }))
+    .filter(x => x.avg !== null)
+    .sort((a, b) => b.avg - a.avg);
+
+  const restaurantsHtml = ranked.length ? ranked.map((x, i) => `
+    <li class="lb-item" data-restaurant="${x.r.id}">
+      <span class="lb-rank">${i + 1}</span>
+      <div class="lb-main">
+        <div class="lb-name">${escapeHtml(x.r.name)}</div>
+        <div class="lb-sub">${x.count} review${x.count === 1 ? '' : 's'}</div>
+      </div>
+      <span class="lb-score">${x.avg.toFixed(1)}</span>
+    </li>
+  `).join('') : `<div class="count-tag lb-empty">No rated places yet.</div>`;
+
+  const userStats = users.map(u => {
+    const rs = reviews.filter(rv => rv.userId === u.id);
+    const avg = rs.length ? rs.reduce((s, r) => s + r.rating, 0) / rs.length : null;
+    return { id: u.id, name: displayNameFor(u.id, u.email ? u.email.split('@')[0] : 'Someone'), count: rs.length, avg };
+  }).filter(u => u.count > 0).sort((a, b) => b.count - a.count);
+
+  const usersHtml = userStats.length ? userStats.map((u, i) => `
+    <li class="lb-item" data-user="${u.id}">
+      <span class="lb-rank">${i + 1}</span>
+      <div class="lb-main">
+        <div class="lb-name">${escapeHtml(u.name)}</div>
+        <div class="lb-sub">${u.count} review${u.count === 1 ? '' : 's'} · Burger Score ${u.avg.toFixed(1)}</div>
+      </div>
+    </li>
+  `).join('') : `<div class="count-tag lb-empty">No reviews yet.</div>`;
+
+  leaderboardView.innerHTML = `
+    <div class="lb-section">
+      <h3 class="lb-heading">Top Burgers</h3>
+      <ol class="lb-list">${restaurantsHtml}</ol>
+    </div>
+    <div class="lb-section">
+      <h3 class="lb-heading">Club Leaderboard</h3>
+      <ol class="lb-list">${usersHtml}</ol>
+    </div>
+  `;
+
+  leaderboardView.querySelectorAll('[data-restaurant]').forEach(li => {
+    li.addEventListener('click', () => {
+      const id = li.dataset.restaurant;
+      openDetailPanel(id);
+      if (markers.has(id)) {
+        map.flyTo(markers.get(id).getLatLng(), 15, { duration: 0.6 });
+        markers.get(id).openPopup();
+      }
+    });
+  });
+  leaderboardView.querySelectorAll('[data-user]').forEach(li => {
+    li.addEventListener('click', () => openUserProfilePanel(li.dataset.user));
+  });
+}
+
+// ---------------- panel: user profile ----------------
+function openUserProfilePanel(userId) {
+  activeRestaurantId = null;
+  activeUserId = userId;
+  panelMode = 'user';
+  const u = users.find(x => x.id === userId);
+  const name = displayNameFor(userId, u && u.email ? u.email.split('@')[0] : 'Someone');
+  const position = (u && u.clubPosition) || 'Member';
+  const myReviews = reviews.filter(rv => rv.userId === userId);
+  const burgerScore = myReviews.length ? myReviews.reduce((s, r) => s + r.rating, 0) / myReviews.length : null;
+
+  panelBody.innerHTML = `
+    <div class="panel-wrap">
+      <button class="close-x" id="panel-close">&times;</button>
+      <h2>${escapeHtml(name)}</h2>
+      <div class="sub">${escapeHtml(position)}</div>
+
+      <div class="burger-score-box">
+        <div>
+          <div class="bs-label">Burger Score</div>
+          <div class="bs-value">${burgerScore !== null ? burgerScore.toFixed(1) : '—'}${burgerScore !== null ? '<span class="meter-max">/10</span>' : ''}</div>
+        </div>
+        <div class="bs-count">${myReviews.length} review${myReviews.length === 1 ? '' : 's'}</div>
+      </div>
+
+      <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
+
+      <div class="review-list">
+        ${myReviews.length ? myReviews.map(rv => {
+          const restaurant = restaurants.find(r => r.id === rv.restaurantId);
+          return `
+            <div class="review-item">
+              <div class="who">
+                <span class="who-name">${escapeHtml(restaurant ? restaurant.name : 'Unknown place')}</span>
+                <span>${rv.rating.toFixed(1)}/10</span>
+              </div>
+              <div class="breakdown">
+                Burger ${Number(rv.burgerRating ?? rv.rating).toFixed(1)} ·
+                Sides/Drinks ${Number(rv.sidesRating ?? rv.rating).toFixed(1)} ·
+                Establishment ${Number(rv.establishmentRating ?? rv.rating).toFixed(1)}
+              </div>
+              ${rv.comment ? `<div class="comment">${escapeHtml(rv.comment)}</div>` : ''}
+            </div>
+          `;
+        }).join('') : `<div class="count-tag">No reviews yet.</div>`}
+      </div>
+    </div>
+  `;
+  panelOverlay.classList.add('open');
+  el('panel-close').addEventListener('click', closePanel);
+}
+
 // ---------------- map ----------------
 function initMapIfNeeded() {
   if (map) return;
@@ -319,6 +447,7 @@ function buildPopupHtml(r) {
 // ---------------- panel: detail + review form ----------------
 function openDetailPanel(restaurantId) {
   activeRestaurantId = restaurantId;
+  activeUserId = null;
   panelMode = 'detail';
   renderDetailPanel(restaurantId);
   panelOverlay.classList.add('open');
@@ -328,6 +457,7 @@ function openDetailPanel(restaurantId) {
 function closePanel() {
   panelOverlay.classList.remove('open');
   activeRestaurantId = null;
+  activeUserId = null;
   panelMode = null;
 }
 el('panel-overlay').addEventListener('click', (e) => {
