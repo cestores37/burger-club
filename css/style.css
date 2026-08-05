@@ -380,6 +380,69 @@ button {
   border-color: var(--ink);
 }
 
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--mustard), var(--red));
+  outline: none;
+}
+.slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--white) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><text x='50%25' y='72%25' font-size='16' text-anchor='middle'>%F0%9F%8D%94</text></svg>") center/72% no-repeat;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+.slider-row input[type="range"]::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--white) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><text x='50%25' y='72%25' font-size='16' text-anchor='middle'>%F0%9F%8D%94</text></svg>") center/72% no-repeat;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+.slider-row input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--mustard), var(--red));
+}
+
+.slider-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 14px;
+  min-width: 34px;
+  text-align: right;
+}
+
+.meter-max {
+  font-size: 10px;
+  opacity: 0.55;
+  font-weight: 400;
+  margin-left: 1px;
+}
+
+.breakdown {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  opacity: 0.6;
+  margin-top: 3px;
+}
+
 .panel-actions {
   display: flex;
   gap: 10px;
