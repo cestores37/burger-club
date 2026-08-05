@@ -48,6 +48,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 10px 20px;
   background: var(--ink);
   color: var(--paper);
@@ -55,10 +56,29 @@ button {
   z-index: 20;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--paper);
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 6px;
+  flex-shrink: 0;
+}
+
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .brand-logo {
@@ -91,11 +111,17 @@ button {
   align-items: center;
   gap: 12px;
   font-size: 13px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 #user-chip .email {
   font-family: 'JetBrains Mono', monospace;
   opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .btn {
@@ -322,6 +348,10 @@ button {
 #map {
   flex: 1;
   min-width: 0;
+}
+
+#sidebar-backdrop {
+  display: none;
 }
 
 /* ---------- Burger meter (signature rating element) ---------- */
@@ -754,5 +784,59 @@ button {
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 
 @media (max-width: 760px) {
-  #sidebar { position: absolute; z-index: 15; height: calc(100% - 52px); box-shadow: var(--shadow); }
+  .menu-toggle { display: inline-flex; }
+
+  .brand-sub { display: none; }
+  .brand-mark { font-size: 18px; }
+  .brand-logo { height: 30px; width: 30px; }
+
+  #user-chip .email { max-width: 34vw; }
+  #user-chip .btn.small { padding: 6px 9px; font-size: 11px; }
+
+  #sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 86vw;
+    max-width: 340px;
+    z-index: 9000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 0 30px rgba(0,0,0,0.4);
+  }
+  #sidebar.open { transform: translateX(0); }
+
+  #sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(32,27,21,0.5);
+    z-index: 8999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  #sidebar-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .panel {
+    width: 94vw;
+    padding: 18px 16px;
+    max-height: 90vh;
+  }
+
+  .panel h2 { font-size: 19px; }
+  .bs-value { font-size: 24px; }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb { width: 26px; height: 26px; }
+  .slider-row input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; }
+
+  #topbar { padding: 8px 12px; }
+}
+
+@media (max-width: 400px) {
+  #user-chip .email { display: none; }
 }
