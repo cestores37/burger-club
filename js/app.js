@@ -188,7 +188,7 @@ onAuthStateChanged(auth, (user) => {
     el('account-btn').addEventListener('click', openAccountPanel);
     el('logout-btn-2').addEventListener('click', () => signOut(auth));
     addEntryBtn.classList.remove('hidden'); // open to all members now, not just admins
-    suggestEntryBtn.classList.toggle('hidden', isAdmin);
+    suggestEntryBtn.classList.remove('hidden'); // now open to admins too
     initMapIfNeeded();
     subscribeData();
     ensureUserProfile(user);
