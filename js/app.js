@@ -813,9 +813,19 @@ function renderDetailPanel(restaurantId) {
   if (isAdmin) {
     el('delete-entry-btn')?.addEventListener('click', async () => {
       if (!confirm(`Remove "${r.name}" and all its reviews? This can't be undone.`)) return;
-      await Promise.all(rs.map(rv => deleteDoc(doc(db, 'reviews', rv.id))));
-      await deleteDoc(doc(db, 'restaurants', restaurantId));
-      closePanel();
+      const btn = el('delete-entry-btn');
+      const errBox = el('review-error');
+      btn.disabled = true;
+      btn.textContent = 'Removing...';
+      try {
+        await Promise.all(rs.map(rv => deleteDoc(doc(db, 'reviews', rv.id))));
+        await deleteDoc(doc(db, 'restaurants', restaurantId));
+        closePanel();
+      } catch (err) {
+        errBox.textContent = "Couldn't remove this place — check your connection and try again.";
+        btn.disabled = false;
+        btn.textContent = 'Remove place';
+      }
     });
   }
 }
