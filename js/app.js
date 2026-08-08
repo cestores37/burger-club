@@ -19,11 +19,17 @@ let isAdmin = false;
 let restaurants = [];   // [{id, name, address, lat, lng, ...}]
 let reviews = [];        // [{id, restaurantId, userId, userName, rating, comment}]
 let users = [];          // [{id (uid), email, displayName}]
+let favorites = [];      // [{id ("uid_restaurantId"), userId, restaurantId}]
 let map = null;
 let markers = new Map(); // restaurantId -> leaflet marker
 let activeRestaurantId = null;
 let activeUserId = null;
 let panelMode = null; // 'detail' | 'add' | 'account' | 'user'
+
+// per-user, local-only view filters (never written to Firestore)
+let filterAddedBy = '';
+let filterOfficialOnly = false;
+let filterFavoritesOnly = false;
 
 const CLUB_POSITIONS = [
   'Grillmaster General',
@@ -90,6 +96,9 @@ const emptyState = el('empty-state');
 const leaderboardView = el('leaderboard-view');
 const addEntryBtn = el('add-entry-btn');
 const suggestEntryBtn = el('suggest-entry-btn');
+const filterAddedBySelect = el('filter-added-by');
+const filterOfficialCheckbox = el('filter-official');
+const filterFavoritesCheckbox = el('filter-favorites');
 const panelOverlay = el('panel-overlay');
 const panelBody = el('panel-body');
 
@@ -100,8 +109,25 @@ function setSidebarTab(tab) {
   el('tab-places').classList.toggle('active', tab === 'places');
   el('tab-leaderboard').classList.toggle('active', tab === 'leaderboard');
   el('places-view').classList.toggle('hidden', tab !== 'places');
+  el('filters-bar').classList.toggle('hidden', tab !== 'places');
   leaderboardView.classList.toggle('hidden', tab !== 'leaderboard');
 }
+
+filterAddedBySelect.addEventListener('change', () => {
+  filterAddedBy = filterAddedBySelect.value;
+  renderEntryList();
+  renderMarkers();
+});
+filterOfficialCheckbox.addEventListener('change', () => {
+  filterOfficialOnly = filterOfficialCheckbox.checked;
+  renderEntryList();
+  renderMarkers();
+});
+filterFavoritesCheckbox.addEventListener('change', () => {
+  filterFavoritesOnly = filterFavoritesCheckbox.checked;
+  renderEntryList();
+  renderMarkers();
+});
 
 // ---------------- mobile sidebar drawer ----------------
 const sidebarEl = el('sidebar');
@@ -205,6 +231,13 @@ function subscribeData() {
     renderLeaderboard();
     refreshOpenPanel();
   });
+
+  onSnapshot(collection(db, 'favorites'), (snap) => {
+    favorites = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderEntryList();
+    renderMarkers();
+    refreshOpenPanel();
+  });
 }
 
 function refreshOpenPanel() {
@@ -220,6 +253,45 @@ function displayNameFor(userId, fallback) {
 function positionFor(userId) {
   const u = users.find(x => x.id === userId);
   return (u && u.clubPosition) || null;
+}
+function addedByName(r) {
+  return displayNameFor(r.addedByUid, r.suggestedByName || (r.addedBy ? r.addedBy.split('@')[0] : 'a member'));
+}
+function isFavorited(restaurantId) {
+  if (!currentUser) return false;
+  return favorites.some(f => f.userId === currentUser.uid && f.restaurantId === restaurantId);
+}
+async function toggleFavorite(restaurantId) {
+  const favId = `${currentUser.uid}_${restaurantId}`;
+  const ref = doc(db, 'favorites', favId);
+  try {
+    if (isFavorited(restaurantId)) {
+      await deleteDoc(ref);
+    } else {
+      await setDoc(ref, { userId: currentUser.uid, restaurantId, createdAt: serverTimestamp() });
+    }
+  } catch (err) { /* non-critical */ }
+}
+function passesFilters(r) {
+  if (filterOfficialOnly && !r.official) return false;
+  if (filterFavoritesOnly && !isFavorited(r.id)) return false;
+  if (filterAddedBy) {
+    const contributorKey = r.addedByUid || r.addedBy || '';
+    if (contributorKey !== filterAddedBy) return false;
+  }
+  return true;
+}
+function renderAddedByFilterOptions() {
+  const seen = new Map(); // key -> label
+  restaurants.forEach(r => {
+    const key = r.addedByUid || r.addedBy;
+    if (!key) return;
+    if (!seen.has(key)) seen.set(key, displayNameFor(r.addedByUid, r.suggestedByName || (r.addedBy ? r.addedBy.split('@')[0] : 'Someone')));
+  });
+  const current = filterAddedBySelect.value;
+  filterAddedBySelect.innerHTML = `<option value="">All members</option>` +
+    Array.from(seen.entries()).map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`).join('');
+  if ([...seen.keys()].includes(current)) filterAddedBySelect.value = current;
 }
 
 // ---------------- helpers ----------------
@@ -259,12 +331,14 @@ function entryCardHtml(r) {
   const isSuggested = r.status === 'suggested';
   const avg = avgRating(r.id);
   const count = reviewsFor(r.id).length;
+  const fav = isFavorited(r.id);
   return `
     <div class="entry-card${isSuggested ? ' suggested' : ''}${r.id === activeRestaurantId ? ' active' : ''}" data-id="${r.id}">
-      <h3>${escapeHtml(r.name)}</h3>
+      ${r.official ? '<img src="logo.png" alt="Official Burger Club location" class="official-badge" title="Official Burger Club location">' : ''}
+      <h3>${fav ? '❤️ ' : ''}${escapeHtml(r.name)}</h3>
       <div class="addr">${escapeHtml(r.address || '')}</div>
       ${isSuggested
-        ? `<div class="count-tag">Suggested by ${escapeHtml(r.suggestedByName || 'a member')}</div>`
+        ? `<div class="count-tag">Suggested by ${escapeHtml(addedByName(r))}</div>`
         : (avg !== null ? meterHtml(avg) : '<div class="count-tag">No ratings yet</div>')}
       ${!isSuggested ? `<div class="entry-meta-row"><span class="count-tag">${count} review${count === 1 ? '' : 's'}</span></div>` : ''}
     </div>
@@ -272,6 +346,8 @@ function entryCardHtml(r) {
 }
 
 function renderEntryList() {
+  renderAddedByFilterOptions();
+
   if (!restaurants.length) {
     entryList.innerHTML = '';
     emptyState.classList.remove('hidden');
@@ -279,15 +355,16 @@ function renderEntryList() {
   }
   emptyState.classList.add('hidden');
 
-  const active = restaurants.filter(r => r.status !== 'suggested');
-  const suggested = restaurants.filter(r => r.status === 'suggested');
+  const filtered = restaurants.filter(passesFilters);
+  const active = filtered.filter(r => r.status !== 'suggested');
+  const suggested = filtered.filter(r => r.status === 'suggested');
 
   const activeHtml = active.length
     ? active.map(entryCardHtml).join('')
-    : `<div class="count-tag section-empty">No places reviewed yet.</div>`;
+    : `<div class="count-tag section-empty">No places match these filters.</div>`;
   const suggestedHtml = suggested.length
     ? suggested.map(entryCardHtml).join('')
-    : `<div class="count-tag section-empty">No suggestions yet.</div>`;
+    : `<div class="count-tag section-empty">No suggestions match these filters.</div>`;
 
   entryList.innerHTML = `
     <div class="entry-section">
@@ -295,7 +372,7 @@ function renderEntryList() {
       ${activeHtml}
     </div>
     <div class="entry-section">
-      <h3 class="entry-section-header tbt-header">To Be Tested</h3>
+      <h3 class="entry-section-header tbt-header">Suggested Club Meeting Locations</h3>
       ${suggestedHtml}
     </div>
   `;
@@ -465,6 +542,7 @@ function renderMarkers() {
   const seen = new Set();
   restaurants.forEach(r => {
     if (typeof r.lat !== 'number' || typeof r.lng !== 'number') return;
+    if (!passesFilters(r)) return; // filtered out — don't show this pin
     seen.add(r.id);
     const popupHtml = buildPopupHtml(r);
     const icon = r.status === 'suggested' ? burgerDivIconSuggested() : burgerDivIcon();
@@ -480,7 +558,7 @@ function renderMarkers() {
       markers.set(r.id, m);
     }
   });
-  // remove stale markers
+  // remove stale/filtered-out markers
   for (const [id, m] of markers.entries()) {
     if (!seen.has(id)) { map.removeLayer(m); markers.delete(id); }
   }
@@ -489,9 +567,9 @@ function renderMarkers() {
 function buildPopupHtml(r) {
   if (r.status === 'suggested') {
     return `
-      <div class="popup-title">${escapeHtml(r.name)}</div>
+      <div class="popup-title">${r.official ? '⭐ ' : ''}${escapeHtml(r.name)}</div>
       <div class="popup-addr">${escapeHtml(r.address || '')}</div>
-      <div class="popup-suggested-tag">🔵 Suggested by ${escapeHtml(r.suggestedByName || 'a member')}</div>
+      <div class="popup-suggested-tag">🔵 Suggested by ${escapeHtml(addedByName(r))}</div>
     `;
   }
   const rs = reviewsFor(r.id);
@@ -503,8 +581,9 @@ function buildPopupHtml(r) {
       </div>`).join('')
     : `<div class="popup-review-row"><span>No reviews yet</span></div>`;
   return `
-    <div class="popup-title">${escapeHtml(r.name)}</div>
+    <div class="popup-title">${r.official ? '⭐ ' : ''}${escapeHtml(r.name)}</div>
     <div class="popup-addr">${escapeHtml(r.address || '')}</div>
+    <div class="popup-addedby">Added by ${escapeHtml(addedByName(r))}</div>
     ${avg !== null ? meterHtml(avg) : ''}
     <div class="popup-reviews">${rowsHtml}</div>
   `;
@@ -531,12 +610,15 @@ el('panel-overlay').addEventListener('click', (e) => {
 });
 
 function renderSuggestionPanel(r, restaurantId) {
+  const fav = isFavorited(restaurantId);
   panelBody.innerHTML = `
     <div class="panel-wrap">
       <button class="close-x" id="panel-close">&times;</button>
-      <h2>${escapeHtml(r.name)}</h2>
+      <h2>${r.official ? '⭐ ' : ''}${escapeHtml(r.name)}</h2>
       <div class="sub">${escapeHtml(r.address || '')}</div>
-      <div class="suggestion-tag">🔵 Suggested by ${escapeHtml(r.suggestedByName || 'a member')}</div>
+      <button class="fav-btn${fav ? ' active' : ''}" id="fav-toggle-btn" title="${fav ? 'Remove from favorites' : 'Add to favorites'}">${fav ? '❤️ Favorited' : '🤍 Favorite'}</button>
+      <div class="suggestion-tag" style="margin-top:10px;">🔵 Suggested by ${escapeHtml(addedByName(r))}</div>
+      ${r.notes ? `<div class="comment" style="margin-top:10px;">${escapeHtml(r.notes)}</div>` : ''}
       <p class="count-tag" style="margin:16px 0;">This place hasn't been added for reviews yet.</p>
       ${isAdmin ? `
         <div class="panel-actions">
@@ -549,6 +631,7 @@ function renderSuggestionPanel(r, restaurantId) {
   `;
   panelOverlay.classList.add('open');
   el('panel-close').addEventListener('click', closePanel);
+  el('fav-toggle-btn').addEventListener('click', () => toggleFavorite(restaurantId));
 
   if (isAdmin) {
     el('promote-btn').addEventListener('click', async () => {
@@ -580,8 +663,12 @@ function renderDetailPanel(restaurantId) {
   panelBody.innerHTML = `
     <div class="panel-wrap">
       <button class="close-x" id="panel-close">&times;</button>
-      <h2 id="name-display">${escapeHtml(r.name)}${isAdmin ? ' <button class="edit-name-btn" id="edit-name-btn" title="Edit name">✏️</button>' : ''}</h2>
-      <div class="sub">${escapeHtml(r.address || '')}</div>
+      <h2 id="name-display">${r.official ? '⭐ ' : ''}${escapeHtml(r.name)}${isAdmin ? ' <button class="edit-name-btn" id="edit-name-btn" title="Edit name">✏️</button>' : ''}</h2>
+      <div class="sub">${escapeHtml(r.address || '')} · Added by ${escapeHtml(addedByName(r))}</div>
+      <div class="detail-toolbar">
+        <button class="fav-btn${isFavorited(restaurantId) ? ' active' : ''}" id="fav-toggle-btn" title="${isFavorited(restaurantId) ? 'Remove from favorites' : 'Add to favorites'}">${isFavorited(restaurantId) ? '❤️ Favorited' : '🤍 Favorite'}</button>
+        ${isAdmin ? `<button class="official-toggle-btn${r.official ? ' active' : ''}" id="official-toggle-btn">${r.official ? '⭐ Official' : '☆ Mark Official'}</button>` : ''}
+      </div>
       ${avg !== null ? meterHtml(avg) : '<div class="count-tag">No ratings yet — be the first</div>'}
 
       <div class="review-list">
@@ -627,6 +714,14 @@ function renderDetailPanel(restaurantId) {
   };
 
   el('panel-close').addEventListener('click', closePanel);
+
+  el('fav-toggle-btn').addEventListener('click', () => toggleFavorite(restaurantId));
+
+  el('official-toggle-btn')?.addEventListener('click', async () => {
+    try {
+      await updateDoc(doc(db, 'restaurants', restaurantId), { official: !r.official });
+    } catch (err) { /* non-critical */ }
+  });
 
   el('edit-name-btn')?.addEventListener('click', () => {
     const nameDisplay = el('name-display');
@@ -706,33 +801,39 @@ let searchDebounceId = null;
 let searchRequestSeq = 0;
 let placeFormMode = 'add'; // 'add' (admin, goes straight to Reviews) | 'suggest' (member, goes to To Be Tested)
 
-function openPlaceFormPanel(mode) {
+function openPlaceFormPanel(mode, prefill) {
   activeRestaurantId = null;
   activeUserId = null;
   panelMode = 'placeform';
   placeFormMode = mode;
-  selectedPlace = null;
+  selectedPlace = (prefill && prefill.selectedPlace) || null;
   const isSuggest = mode === 'suggest';
   panelBody.innerHTML = `
     <div class="panel-wrap">
       <button class="close-x" id="panel-close">&times;</button>
-      <h2>${isSuggest ? 'Suggest a place' : 'Add a place'}</h2>
-      <div class="sub">${isSuggest ? "Know somewhere we should try? Search for it below and it'll show up under To Be Tested." : "Start typing — pick a match and the address fills in automatically."}</div>
+      <h2>${isSuggest ? 'Suggest Club Meeting Location' : 'Add a place'}</h2>
+      <div class="sub">${isSuggest ? "Know a great spot for our next meetup? Search for it below." : "Start typing — pick a match and the address fills in automatically."}</div>
       <div class="field" style="position:relative;">
         <label>Search</label>
-        <input type="text" id="place-search" placeholder="e.g. Big Al's Burgers" autocomplete="off">
+        <input type="text" id="place-search" placeholder="e.g. Big Al's Burgers" autocomplete="off" value="${escapeHtml((prefill && prefill.search) || '')}">
         <div id="place-suggestions" class="suggestions hidden"></div>
       </div>
       <div class="field">
         <label>Name</label>
-        <input type="text" id="new-name" placeholder="e.g. Big Al's Burgers">
+        <input type="text" id="new-name" placeholder="e.g. Big Al's Burgers" value="${escapeHtml((prefill && prefill.name) || '')}">
       </div>
       <div class="field">
         <label>Address</label>
-        <input type="text" id="new-address" placeholder="123 Main St, Brooklyn, NY">
+        <input type="text" id="new-address" placeholder="123 Main St, Brooklyn, NY" value="${escapeHtml((prefill && prefill.address) || '')}">
       </div>
+      ${isSuggest ? `
+        <div class="field">
+          <label>Notes (optional)</label>
+          <textarea id="new-notes" placeholder="Why here? Good for groups, happy hour, etc.">${escapeHtml((prefill && prefill.notes) || '')}</textarea>
+        </div>
+      ` : ''}
       <div class="panel-actions">
-        <button class="btn" id="geocode-save-btn">${isSuggest ? 'Submit suggestion' : 'Save place'}</button>
+        <button class="btn" id="geocode-save-btn">${isSuggest ? 'Submit Location' : 'Save place'}</button>
       </div>
       <div class="error-msg" id="add-error"></div>
     </div>
@@ -813,12 +914,26 @@ async function runPlaceSearch(q, suggestionsBox) {
 
 async function handleAddEntry() {
   const isSuggest = placeFormMode === 'suggest';
-  const defaultLabel = isSuggest ? 'Submit suggestion' : 'Save place';
+  const defaultLabel = isSuggest ? 'Submit Location' : 'Save place';
   const name = el('new-name').value.trim();
   const address = el('new-address').value.trim();
+  const notes = isSuggest ? (el('new-notes')?.value.trim() || '') : '';
   const errBox = el('add-error');
   errBox.textContent = '';
   if (!name || !address) { errBox.textContent = 'Fill in both the name and address.'; return; }
+
+  // Duplicate check against everything already on the list (reviewed or suggested).
+  const nameKey = name.trim().toLowerCase();
+  const addrKey = address.trim().toLowerCase();
+  const isDuplicate = restaurants.some(r =>
+    (r.address && r.address.trim().toLowerCase() === addrKey) ||
+    (r.name && r.name.trim().toLowerCase() === nameKey)
+  );
+  if (isDuplicate) {
+    showDuplicateNotice(placeFormMode, { name, address, notes, search: el('place-search').value, selectedPlace });
+    return;
+  }
+
   const btn = el('geocode-save-btn');
   btn.disabled = true;
 
@@ -846,11 +961,13 @@ async function handleAddEntry() {
       lat,
       lng,
       addedBy: currentUser.email,
+      addedByUid: currentUser.uid,
       createdAt: serverTimestamp()
     };
     if (isSuggest) {
       payload.status = 'suggested';
       payload.suggestedByName = displayNameFor(currentUser.uid, currentUser.email.split('@')[0]);
+      payload.notes = notes;
     } else {
       payload.status = 'active';
     }
@@ -862,6 +979,19 @@ async function handleAddEntry() {
   }
 }
 
+function showDuplicateNotice(mode, prefill) {
+  panelBody.innerHTML = `
+    <div class="panel-wrap duplicate-notice">
+      <button class="close-x" id="panel-close">&times;</button>
+      <img src="logo.png" alt="Burger Club logo" class="duplicate-logo">
+      <p class="duplicate-text">Good looks, we got that on the list already!</p>
+      <button class="btn" id="duplicate-back-btn">Back to the form</button>
+    </div>
+  `;
+  el('panel-close').addEventListener('click', closePanel);
+  el('duplicate-back-btn').addEventListener('click', () => openPlaceFormPanel(mode, prefill));
+}
+
 // ---------------- panel: account ----------------
 function openAccountPanel() {
   activeRestaurantId = null;
@@ -869,6 +999,10 @@ function openAccountPanel() {
   const me = users.find(u => u.id === currentUser.uid);
   const myName = (me && me.displayName) || currentUser.email.split('@')[0];
   const myReviews = reviews.filter(rv => rv.userId === currentUser.uid);
+  const myFavorites = favorites
+    .filter(f => f.userId === currentUser.uid)
+    .map(f => restaurants.find(r => r.id === f.restaurantId))
+    .filter(Boolean);
 
   panelBody.innerHTML = `
     <div class="panel-wrap">
@@ -890,6 +1024,20 @@ function openAccountPanel() {
       </div>
       <button class="btn small" id="save-display-name-btn">Save name</button>
       <div class="error-msg" id="account-error"></div>
+
+      <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
+
+      <div class="sub" style="margin-bottom:8px;">Favorited spots (${myFavorites.length})</div>
+      <div class="review-list">
+        ${myFavorites.length ? myFavorites.map(r => `
+          <div class="review-item fav-item" data-fav-goto="${r.id}">
+            <div class="who">
+              <span class="who-name">${r.official ? '⭐ ' : ''}❤️ ${escapeHtml(r.name)}</span>
+            </div>
+            <div class="breakdown">${escapeHtml(r.address || '')}</div>
+          </div>
+        `).join('') : `<div class="count-tag">No favorites yet — tap 🤍 on any place to save it here.</div>`}
+      </div>
 
       <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
 
@@ -954,6 +1102,17 @@ function openAccountPanel() {
     btn.addEventListener('click', async () => {
       if (!confirm('Delete this review?')) return;
       await deleteDoc(doc(db, 'reviews', btn.dataset.del));
+    });
+  });
+  panelBody.querySelectorAll('[data-fav-goto]').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = item.dataset.favGoto;
+      openDetailPanel(id);
+      if (markers.has(id) && map) {
+        map.flyTo(markers.get(id).getLatLng(), 15, { duration: 0.6 });
+        markers.get(id).openPopup();
+      }
+      closeSidebar();
     });
   });
 }
