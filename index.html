@@ -51,11 +51,18 @@
         <h2>The Ledger</h2>
         <p>The quest for the best NYC burger starts here.</p>
         <button class="btn small hidden" id="add-entry-btn" style="margin-top:10px;width:100%;">+ Add a place</button>
-        <button class="btn small hidden" id="suggest-entry-btn" style="margin-top:10px;width:100%;">🔍 Suggest a place</button>
+        <button class="btn small hidden" id="suggest-entry-btn" style="margin-top:10px;width:100%;">🔍 Suggest Club Meeting Location</button>
         <div class="sidebar-tabs">
           <button class="tab-btn active" id="tab-places">Places</button>
           <button class="tab-btn" id="tab-leaderboard">Leaderboard</button>
         </div>
+      </div>
+      <div id="filters-bar">
+        <select id="filter-added-by" class="filter-select">
+          <option value="">All members</option>
+        </select>
+        <label class="filter-check"><input type="checkbox" id="filter-official"> ⭐ Official only</label>
+        <label class="filter-check"><input type="checkbox" id="filter-favorites"> ❤️ My favorites</label>
       </div>
       <div id="places-view">
         <div id="entry-list"></div>
