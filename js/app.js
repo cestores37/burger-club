@@ -29,6 +29,7 @@ let panelMode = null; // 'detail' | 'add' | 'account' | 'user'
 // per-user, local-only view filters (never written to Firestore)
 let filterAddedBy = '';
 let filterOfficialOnly = false;
+let filterSuggestedOnly = false;
 let filterFavoritesOnly = false;
 
 const CLUB_POSITIONS = [
@@ -98,6 +99,7 @@ const addEntryBtn = el('add-entry-btn');
 const suggestEntryBtn = el('suggest-entry-btn');
 const filterAddedBySelect = el('filter-added-by');
 const filterOfficialCheckbox = el('filter-official');
+const filterSuggestedCheckbox = el('filter-suggested');
 const filterFavoritesCheckbox = el('filter-favorites');
 const panelOverlay = el('panel-overlay');
 const panelBody = el('panel-body');
@@ -120,6 +122,11 @@ filterAddedBySelect.addEventListener('change', () => {
 });
 filterOfficialCheckbox.addEventListener('change', () => {
   filterOfficialOnly = filterOfficialCheckbox.checked;
+  renderEntryList();
+  renderMarkers();
+});
+filterSuggestedCheckbox.addEventListener('change', () => {
+  filterSuggestedOnly = filterSuggestedCheckbox.checked;
   renderEntryList();
   renderMarkers();
 });
@@ -254,8 +261,18 @@ function positionFor(userId) {
   const u = users.find(x => x.id === userId);
   return (u && u.clubPosition) || null;
 }
+function contributorKeyFor(r) {
+  // Prefer the stored uid. For older entries saved before addedByUid existed,
+  // resolve the same person via their email so they don't show up as a duplicate.
+  if (r.addedByUid) return r.addedByUid;
+  if (r.addedBy) {
+    const match = users.find(u => u.email === r.addedBy);
+    if (match) return match.id;
+  }
+  return r.addedBy || '';
+}
 function addedByName(r) {
-  return displayNameFor(r.addedByUid, r.suggestedByName || (r.addedBy ? r.addedBy.split('@')[0] : 'a member'));
+  return displayNameFor(contributorKeyFor(r), r.suggestedByName || (r.addedBy ? r.addedBy.split('@')[0] : 'a member'));
 }
 function isFavorited(restaurantId) {
   if (!currentUser) return false;
@@ -274,19 +291,19 @@ async function toggleFavorite(restaurantId) {
 }
 function passesFilters(r) {
   if (filterOfficialOnly && !r.official) return false;
+  if (filterSuggestedOnly && r.status !== 'suggested') return false;
   if (filterFavoritesOnly && !isFavorited(r.id)) return false;
   if (filterAddedBy) {
-    const contributorKey = r.addedByUid || r.addedBy || '';
-    if (contributorKey !== filterAddedBy) return false;
+    if (contributorKeyFor(r) !== filterAddedBy) return false;
   }
   return true;
 }
 function renderAddedByFilterOptions() {
   const seen = new Map(); // key -> label
   restaurants.forEach(r => {
-    const key = r.addedByUid || r.addedBy;
+    const key = contributorKeyFor(r);
     if (!key) return;
-    if (!seen.has(key)) seen.set(key, displayNameFor(r.addedByUid, r.suggestedByName || (r.addedBy ? r.addedBy.split('@')[0] : 'Someone')));
+    if (!seen.has(key)) seen.set(key, addedByName(r));
   });
   const current = filterAddedBySelect.value;
   filterAddedBySelect.innerHTML = `<option value="">All members</option>` +
