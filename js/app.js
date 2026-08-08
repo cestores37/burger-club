@@ -907,7 +907,10 @@ async function runPlaceSearch(q, suggestionsBox) {
   const seq = ++searchRequestSeq;
   try {
     // Biased toward NYC (where the map defaults) — still finds places anywhere.
-    const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lat=40.7128&lon=-74.0060&zoom=12`);
+    // Hard-restricted to the greater NYC metro area (all five boroughs + nearby NJ/LI) —
+    // the lat/lon bias alone wasn't strong enough to keep out far-away name matches.
+    const nycBbox = '-74.35,40.45,-73.55,41.05';
+    const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lat=40.7128&lon=-74.0060&bbox=${nycBbox}`);
     const data = await resp.json();
     if (seq !== searchRequestSeq) return; // a newer search superseded this one
     const features = data.features || [];
