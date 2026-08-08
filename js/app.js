@@ -180,7 +180,7 @@ onAuthStateChanged(auth, (user) => {
     `;
     el('account-btn').addEventListener('click', openAccountPanel);
     el('logout-btn-2').addEventListener('click', () => signOut(auth));
-    addEntryBtn.classList.toggle('hidden', !isAdmin);
+    addEntryBtn.classList.remove('hidden'); // open to all members now, not just admins
     suggestEntryBtn.classList.toggle('hidden', isAdmin);
     initMapIfNeeded();
     subscribeData();
@@ -456,6 +456,7 @@ function renderLeaderboard() {
 
 // ---------------- panel: user profile ----------------
 function openUserProfilePanel(userId) {
+  setOfficialStamp(false);
   activeRestaurantId = null;
   activeUserId = userId;
   panelMode = 'user';
@@ -599,17 +600,23 @@ function openDetailPanel(restaurantId) {
   renderEntryList();
 }
 
+function setOfficialStamp(show) {
+  el('official-stamp').classList.toggle('hidden', !show);
+}
+
 function closePanel() {
   panelOverlay.classList.remove('open');
   activeRestaurantId = null;
   activeUserId = null;
   panelMode = null;
+  setOfficialStamp(false);
 }
 el('panel-overlay').addEventListener('click', (e) => {
   if (e.target === panelOverlay) closePanel();
 });
 
 function renderSuggestionPanel(r, restaurantId) {
+  setOfficialStamp(false);
   const fav = isFavorited(restaurantId);
   panelBody.innerHTML = `
     <div class="panel-wrap">
@@ -656,6 +663,7 @@ function renderDetailPanel(restaurantId) {
   const r = restaurants.find(x => x.id === restaurantId);
   if (!r) { closePanel(); return; }
   if (r.status === 'suggested') { renderSuggestionPanel(r, restaurantId); return; }
+  setOfficialStamp(!!r.official);
   const rs = reviewsFor(restaurantId);
   const myReview = rs.find(rv => rv.userId === currentUser?.uid);
   const avg = avgRating(restaurantId);
@@ -802,6 +810,7 @@ let searchRequestSeq = 0;
 let placeFormMode = 'add'; // 'add' (admin, goes straight to Reviews) | 'suggest' (member, goes to To Be Tested)
 
 function openPlaceFormPanel(mode, prefill) {
+  setOfficialStamp(false);
   activeRestaurantId = null;
   activeUserId = null;
   panelMode = 'placeform';
@@ -980,6 +989,7 @@ async function handleAddEntry() {
 }
 
 function showDuplicateNotice(mode, prefill) {
+  setOfficialStamp(false);
   panelBody.innerHTML = `
     <div class="panel-wrap duplicate-notice">
       <button class="close-x" id="panel-close">&times;</button>
@@ -994,6 +1004,7 @@ function showDuplicateNotice(mode, prefill) {
 
 // ---------------- panel: account ----------------
 function openAccountPanel() {
+  setOfficialStamp(false);
   activeRestaurantId = null;
   panelMode = 'account';
   const me = users.find(u => u.id === currentUser.uid);
