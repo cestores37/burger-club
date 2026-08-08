@@ -215,6 +215,37 @@ button {
 
 #places-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
+#filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  border-bottom: 1px dashed var(--line);
+  font-size: 11.5px;
+}
+.filter-select {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  max-width: 130px;
+}
+.filter-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  opacity: 0.8;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-check input { cursor: pointer; }
+
 #leaderboard-view {
   flex: 1;
   overflow-y: auto;
@@ -308,6 +339,7 @@ button {
 }
 
 .entry-card {
+  position: relative;
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -318,6 +350,19 @@ button {
 }
 .entry-card:hover { box-shadow: var(--shadow); border-color: var(--mustard); }
 .entry-card.active { border-color: var(--red); box-shadow: var(--shadow); }
+
+.official-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--mustard);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+  z-index: 2;
+}
 
 .entry-card h3 {
   font-family: 'Anton', sans-serif;
@@ -481,7 +526,50 @@ button {
   font-weight: 600;
 }
 
+.popup-addedby {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  opacity: 0.55;
+  margin-bottom: 6px;
+}
+
 /* ---------- Panel (detail / add review) ---------- */
+
+.detail-toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 14px;
+  flex-wrap: wrap;
+}
+.fav-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+.fav-btn.active {
+  border-color: var(--red);
+  background: rgba(193,39,45,0.08);
+}
+.official-toggle-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+.official-toggle-btn.active {
+  border-color: var(--mustard);
+  background: rgba(227,165,55,0.15);
+  color: #8a5a00;
+}
 
 #panel-overlay {
   position: fixed;
@@ -787,6 +875,29 @@ button {
   margin-top: 8px;
   font-weight: 700;
 }
+
+.duplicate-notice {
+  text-align: center;
+  padding-top: 10px;
+}
+.duplicate-logo {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin: 0 auto 16px;
+  display: block;
+  box-shadow: var(--shadow);
+}
+.duplicate-text {
+  font-family: 'Anton', sans-serif;
+  font-size: 19px;
+  line-height: 1.3;
+  margin: 0 0 22px;
+}
+
+.fav-item { cursor: pointer; transition: background 0.12s ease; }
+.fav-item:hover { background: var(--paper-dim); border-radius: 8px; }
 
 /* ---------- Login screen ---------- */
 
