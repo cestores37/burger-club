@@ -842,12 +842,13 @@ button {
 
 .close-x {
   position: absolute;
-  top: 14px;
-  right: 16px;
+  top: 6px;
+  right: 8px;
   background: none;
   font-size: 20px;
   color: var(--ink);
   opacity: 0.5;
+  z-index: 10600;
 }
 .close-x:hover { opacity: 1; }
 
@@ -859,11 +860,11 @@ button {
 
 .official-stamp {
   position: absolute;
-  top: -34px;
+  top: -58px;
   left: 50%;
-  width: 240px;
+  width: 160px;
   height: auto;
-  transform: translateX(-50%) rotate(-4deg);
+  transform: translateX(-50%) rotate(-3deg);
   filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
   z-index: 10500;
 }
