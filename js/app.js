@@ -680,9 +680,9 @@ function renderDetailPanel(restaurantId) {
   panelBody.innerHTML = `
     <div class="panel-wrap">
       <button class="close-x" id="panel-close">&times;</button>
+      ${r.official ? '<img src="official-stamp.png" alt="Official Meeting Location" class="official-stamp-inline">' : ''}
       <h2 id="name-display">${r.official ? '⭐ ' : ''}${escapeHtml(r.name)}${isAdmin ? ' <button class="edit-name-btn" id="edit-name-btn" title="Edit name">✏️</button>' : ''}</h2>
       <div class="sub">${escapeHtml(r.address || '')} · Added by ${escapeHtml(addedByName(r))}</div>
-      ${r.official ? '<img src="official-stamp.png" alt="Official Meeting Location" class="official-stamp-inline">' : ''}
       <div class="detail-toolbar">
         <button class="fav-btn${isFavorited(restaurantId) ? ' active' : ''}" id="fav-toggle-btn" title="${isFavorited(restaurantId) ? 'Remove from favorites' : 'Add to favorites'}">${isFavorited(restaurantId) ? '❤️ Favorited' : '🤍 Favorite'}</button>
         ${isAdmin ? `<button class="official-toggle-btn${r.official ? ' active' : ''}" id="official-toggle-btn">${r.official ? '⭐ Official' : '☆ Mark Official'}</button>` : ''}
