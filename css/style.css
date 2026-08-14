@@ -858,7 +858,7 @@ button {
   width: 220px;
   max-width: 70%;
   height: auto;
-  margin: 10px 0 14px;
+  margin: 6px auto 14px;
   filter: drop-shadow(0 3px 8px rgba(0,0,0,0.35));
 }
 .official-stamp.hidden { display: none; }
