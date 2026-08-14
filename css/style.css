@@ -842,31 +842,24 @@ button {
 
 .close-x {
   position: absolute;
-  top: 6px;
-  right: 8px;
+  top: 14px;
+  right: 16px;
   background: none;
   font-size: 20px;
   color: var(--ink);
   opacity: 0.5;
-  z-index: 10600;
 }
 .close-x:hover { opacity: 1; }
 
 .panel-wrap { position: relative; }
 
-.panel-shell {
-  position: relative;
-}
-
-.official-stamp {
-  position: absolute;
-  top: -58px;
-  left: 50%;
-  width: 160px;
+.official-stamp-inline {
+  display: block;
+  width: 220px;
+  max-width: 70%;
   height: auto;
-  transform: translateX(-50%) rotate(-3deg);
-  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
-  z-index: 10500;
+  margin: 10px 0 14px;
+  filter: drop-shadow(0 3px 8px rgba(0,0,0,0.35));
 }
 .official-stamp.hidden { display: none; }
 
