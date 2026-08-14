@@ -719,6 +719,8 @@ button {
   color: var(--ink);
 }
 .field textarea { resize: vertical; min-height: 60px; }
+.field textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+.slider-row input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .suggestions {
   position: absolute;
