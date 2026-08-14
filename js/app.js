@@ -473,7 +473,6 @@ function renderLeaderboard() {
 
 // ---------------- panel: user profile ----------------
 function openUserProfilePanel(userId) {
-  setOfficialStamp(false);
   activeRestaurantId = null;
   activeUserId = userId;
   panelMode = 'user';
@@ -617,23 +616,17 @@ function openDetailPanel(restaurantId) {
   renderEntryList();
 }
 
-function setOfficialStamp(show) {
-  el('official-stamp').classList.toggle('hidden', !show);
-}
-
 function closePanel() {
   panelOverlay.classList.remove('open');
   activeRestaurantId = null;
   activeUserId = null;
   panelMode = null;
-  setOfficialStamp(false);
 }
 el('panel-overlay').addEventListener('click', (e) => {
   if (e.target === panelOverlay) closePanel();
 });
 
 function renderSuggestionPanel(r, restaurantId) {
-  setOfficialStamp(false);
   const fav = isFavorited(restaurantId);
   panelBody.innerHTML = `
     <div class="panel-wrap">
@@ -680,7 +673,6 @@ function renderDetailPanel(restaurantId) {
   const r = restaurants.find(x => x.id === restaurantId);
   if (!r) { closePanel(); return; }
   if (r.status === 'suggested') { renderSuggestionPanel(r, restaurantId); return; }
-  setOfficialStamp(!!r.official);
   const rs = reviewsFor(restaurantId);
   const myReview = rs.find(rv => rv.userId === currentUser?.uid);
   const avg = avgRating(restaurantId);
@@ -690,6 +682,7 @@ function renderDetailPanel(restaurantId) {
       <button class="close-x" id="panel-close">&times;</button>
       <h2 id="name-display">${r.official ? '⭐ ' : ''}${escapeHtml(r.name)}${isAdmin ? ' <button class="edit-name-btn" id="edit-name-btn" title="Edit name">✏️</button>' : ''}</h2>
       <div class="sub">${escapeHtml(r.address || '')} · Added by ${escapeHtml(addedByName(r))}</div>
+      ${r.official ? '<img src="official-stamp.png" alt="Official Meeting Location" class="official-stamp-inline">' : ''}
       <div class="detail-toolbar">
         <button class="fav-btn${isFavorited(restaurantId) ? ' active' : ''}" id="fav-toggle-btn" title="${isFavorited(restaurantId) ? 'Remove from favorites' : 'Add to favorites'}">${isFavorited(restaurantId) ? '❤️ Favorited' : '🤍 Favorite'}</button>
         ${isAdmin ? `<button class="official-toggle-btn${r.official ? ' active' : ''}" id="official-toggle-btn">${r.official ? '⭐ Official' : '☆ Mark Official'}</button>` : ''}
@@ -837,7 +830,6 @@ let searchRequestSeq = 0;
 let placeFormMode = 'add'; // 'add' (admin, goes straight to Reviews) | 'suggest' (member, goes to To Be Tested)
 
 function openPlaceFormPanel(mode, prefill) {
-  setOfficialStamp(false);
   activeRestaurantId = null;
   activeUserId = null;
   panelMode = 'placeform';
@@ -1019,7 +1011,6 @@ async function handleAddEntry() {
 }
 
 function showDuplicateNotice(mode, prefill) {
-  setOfficialStamp(false);
   panelBody.innerHTML = `
     <div class="panel-wrap duplicate-notice">
       <button class="close-x" id="panel-close">&times;</button>
@@ -1034,7 +1025,6 @@ function showDuplicateNotice(mode, prefill) {
 
 // ---------------- panel: account ----------------
 function openAccountPanel() {
-  setOfficialStamp(false);
   activeRestaurantId = null;
   panelMode = 'account';
   const me = users.find(u => u.id === currentUser.uid);
