@@ -859,15 +859,12 @@ button {
 
 .official-stamp {
   position: absolute;
-  top: -20px;
-  right: -20px;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid var(--mustard);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.45);
-  transform: rotate(14deg);
+  top: -34px;
+  left: 50%;
+  width: 240px;
+  height: auto;
+  transform: translateX(-50%) rotate(-4deg);
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
   z-index: 10500;
 }
 .official-stamp.hidden { display: none; }
