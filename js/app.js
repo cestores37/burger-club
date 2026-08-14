@@ -2,7 +2,7 @@ import { firebaseConfig, ADMIN_EMAILS } from './firebase-config.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, signInAnonymously
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc,
@@ -16,6 +16,7 @@ const db = getFirestore(app);
 // ---------------- state ----------------
 let currentUser = null;
 let isAdmin = false;
+let isGuestUser = false;
 let restaurants = [];   // [{id, name, address, lat, lng, ...}]
 let reviews = [];        // [{id, restaurantId, userId, userName, rating, comment}]
 let users = [];          // [{id (uid), email, displayName}]
@@ -164,6 +165,16 @@ el('login-form').addEventListener('submit', async (e) => {
   }
 });
 
+el('guest-login-btn').addEventListener('click', async () => {
+  const errBox = el('login-error');
+  errBox.textContent = '';
+  try {
+    await signInAnonymously(auth);
+  } catch (err) {
+    errBox.textContent = "Couldn't continue as a guest right now — try again.";
+  }
+});
+
 function friendlyAuthError(err) {
   const code = err.code || '';
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
@@ -175,23 +186,32 @@ function friendlyAuthError(err) {
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
-  isAdmin = !!user && ADMIN_EMAILS.includes(user.email);
+  isGuestUser = !!user && user.isAnonymous;
+  isAdmin = !!user && !isGuestUser && ADMIN_EMAILS.includes(user.email);
   if (user) {
     loginScreen.classList.add('hidden');
     appShell.classList.remove('hidden');
     topbar.classList.remove('hidden');
-    userChip.innerHTML = `
-      <span class="email">${escapeHtml(user.email)}${isAdmin ? ' · admin' : ''}</span>
-      <button class="btn ghost small" id="account-btn">Account</button>
-      <button class="btn ghost small" id="logout-btn-2">Log out</button>
-    `;
-    el('account-btn').addEventListener('click', openAccountPanel);
-    el('logout-btn-2').addEventListener('click', () => signOut(auth));
-    addEntryBtn.classList.remove('hidden'); // open to all members now, not just admins
-    suggestEntryBtn.classList.remove('hidden'); // now open to admins too
+    if (isGuestUser) {
+      userChip.innerHTML = `
+        <span class="email">👋 Guest</span>
+        <button class="btn ghost small" id="logout-btn-2">Log out</button>
+      `;
+      el('logout-btn-2').addEventListener('click', () => signOut(auth));
+    } else {
+      userChip.innerHTML = `
+        <span class="email">${escapeHtml(user.email)}${isAdmin ? ' · admin' : ''}</span>
+        <button class="btn ghost small" id="account-btn">Account</button>
+        <button class="btn ghost small" id="logout-btn-2">Log out</button>
+      `;
+      el('account-btn').addEventListener('click', openAccountPanel);
+      el('logout-btn-2').addEventListener('click', () => signOut(auth));
+    }
+    addEntryBtn.classList.remove('hidden'); // visible to guests too, but clicks get intercepted
+    suggestEntryBtn.classList.remove('hidden');
     initMapIfNeeded();
     subscribeData();
-    ensureUserProfile(user);
+    if (!isGuestUser) ensureUserProfile(user);
   } else {
     loginScreen.classList.remove('hidden');
     appShell.classList.add('hidden');
@@ -330,13 +350,13 @@ function meterHtml(rating, max = 10) {
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function sliderField(cat, label, value) {
+function sliderField(cat, label, value, disabled) {
   const v = (value ?? 5.0);
   return `
     <div class="field">
       <label>${label}</label>
       <div class="slider-row">
-        <input type="range" min="1" max="10" step="0.1" value="${v}" data-cat="${cat}" class="burger-slider">
+        <input type="range" min="1" max="10" step="0.1" value="${v}" data-cat="${cat}" class="burger-slider"${disabled ? ' disabled' : ''}>
         <span class="slider-num" data-cat="${cat}">${Number(v).toFixed(1)}</span>
       </div>
     </div>
@@ -655,7 +675,7 @@ function renderSuggestionPanel(r, restaurantId) {
   `;
   panelOverlay.classList.add('open');
   el('panel-close').addEventListener('click', closePanel);
-  el('fav-toggle-btn').addEventListener('click', () => toggleFavorite(restaurantId));
+  el('fav-toggle-btn').addEventListener('click', () => { if (isGuestUser) { showGuestRestrictedNotice(); return; } toggleFavorite(restaurantId); });
 
   if (isAdmin) {
     el('promote-btn').addEventListener('click', async () => {
@@ -715,13 +735,13 @@ function renderDetailPanel(restaurantId) {
 
       <hr style="border:none;border-top:1px dashed var(--line);margin:18px 0;">
 
-      ${sliderField('burger', 'Burger', myReview?.burgerRating)}
-      ${sliderField('sides', 'Sides / Drinks', myReview?.sidesRating)}
-      ${sliderField('establishment', 'Establishment', myReview?.establishmentRating)}
+      ${sliderField('burger', 'Burger', myReview?.burgerRating, isGuestUser)}
+      ${sliderField('sides', 'Sides / Drinks', myReview?.sidesRating, isGuestUser)}
+      ${sliderField('establishment', 'Establishment', myReview?.establishmentRating, isGuestUser)}
 
       <div class="field">
         <label>Notes (optional)</label>
-        <textarea id="review-comment" placeholder="What'd you get, how was it...">${escapeHtml(myReview?.comment || '')}</textarea>
+        <textarea id="review-comment" placeholder="What'd you get, how was it..."${isGuestUser ? ' disabled' : ''}>${escapeHtml(myReview?.comment || '')}</textarea>
       </div>
       <div class="panel-actions">
         <button class="btn" id="save-review-btn">${myReview ? 'Update your review' : 'Save your review'}</button>
@@ -740,7 +760,7 @@ function renderDetailPanel(restaurantId) {
 
   el('panel-close').addEventListener('click', closePanel);
 
-  el('fav-toggle-btn').addEventListener('click', () => toggleFavorite(restaurantId));
+  el('fav-toggle-btn').addEventListener('click', () => { if (isGuestUser) { showGuestRestrictedNotice(); return; } toggleFavorite(restaurantId); });
 
   el('official-toggle-btn')?.addEventListener('click', async () => {
     try {
@@ -782,6 +802,7 @@ function renderDetailPanel(restaurantId) {
   });
 
   el('save-review-btn').addEventListener('click', async () => {
+    if (isGuestUser) { showGuestRestrictedNotice(); return; }
     const errBox = el('review-error');
     errBox.textContent = '';
     const comment = el('review-comment').value.trim();
@@ -900,8 +921,14 @@ function openPlaceFormPanel(mode, prefill) {
   });
 }
 
-addEntryBtn.addEventListener('click', () => openPlaceFormPanel('add'));
-suggestEntryBtn.addEventListener('click', () => openPlaceFormPanel('suggest'));
+addEntryBtn.addEventListener('click', () => {
+  if (isGuestUser) { showGuestRestrictedNotice(); return; }
+  openPlaceFormPanel('add');
+});
+suggestEntryBtn.addEventListener('click', () => {
+  if (isGuestUser) { showGuestRestrictedNotice(); return; }
+  openPlaceFormPanel('suggest');
+});
 
 async function runPlaceSearch(q, suggestionsBox) {
   const seq = ++searchRequestSeq;
@@ -1016,6 +1043,21 @@ async function handleAddEntry() {
     errBox.textContent = "Something went wrong saving that place. Try again.";
     btn.disabled = false; btn.textContent = defaultLabel;
   }
+}
+
+function showGuestRestrictedNotice() {
+  setOfficialStamp(false);
+  panelOverlay.classList.add('open');
+  panelBody.innerHTML = `
+    <div class="panel-wrap duplicate-notice">
+      <button class="close-x" id="panel-close">&times;</button>
+      <img src="logo.png" alt="Burger Club logo" class="duplicate-logo">
+      <p class="duplicate-text">The Burger Board has restricted this feature to club members, please reach out to your admin to apply.</p>
+      <button class="btn" id="guest-notice-ok-btn">Got it</button>
+    </div>
+  `;
+  el('panel-close').addEventListener('click', closePanel);
+  el('guest-notice-ok-btn').addEventListener('click', closePanel);
 }
 
 function showDuplicateNotice(mode, prefill) {
